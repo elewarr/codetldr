@@ -59,7 +59,7 @@ target_link_libraries(codetldr_query
 add_executable(codetldr-daemon src/daemon/main.cpp)
 target_link_libraries(codetldr-daemon PRIVATE codetldr_daemon)
 
-add_executable(codetldr src/cli/main.cpp src/cli/search_cmd.cpp)
+add_executable(codetldr src/cli/main.cpp src/cli/search_cmd.cpp src/cli/init_cmd.cpp)
 target_link_libraries(codetldr PRIVATE codetldr_daemon)
 
 add_executable(codetldr-mcp src/mcp/main.cpp)
@@ -130,3 +130,13 @@ add_test(NAME ignore_filter COMMAND test_ignore_filter)
 add_executable(test_new_rpc_methods tests/test_new_rpc_methods.cpp)
 target_link_libraries(test_new_rpc_methods PRIVATE codetldr_daemon codetldr_query codetldr_foundation)
 add_test(NAME new_rpc_methods COMMAND test_new_rpc_methods)
+
+add_executable(test_cli_init tests/test_cli_init.cpp)
+target_link_libraries(test_cli_init PRIVATE codetldr_daemon codetldr_analysis codetldr_foundation)
+add_test(NAME cli_init COMMAND test_cli_init)
+
+add_executable(test_mcp_provider tests/test_mcp_provider.cpp)
+target_link_libraries(test_mcp_provider PRIVATE nlohmann_json::nlohmann_json)
+add_test(NAME mcp_provider COMMAND test_mcp_provider)
+add_dependencies(test_mcp_provider codetldr-mcp)
+set_tests_properties(mcp_provider PROPERTIES ENVIRONMENT "MCP_BIN=$<TARGET_FILE:codetldr-mcp>")
