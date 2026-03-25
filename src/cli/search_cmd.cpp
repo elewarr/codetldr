@@ -98,7 +98,7 @@ void register_search_cmd(CLI::App& app, std::string& project_root_str) {
                 for (const auto& item : results) {
                     std::string name = item.value("name", "?");
                     std::string kind = item.value("kind", "");
-                    std::string file = item.value("file", "");
+                    std::string file = item.value("file_path", "");
                     int line = item.value("line", 0);
 
                     if (!kind.empty()) {

@@ -44,9 +44,9 @@ int main() {
     auto db = codetldr::Database::open(db_path);
 
     // Test: schema version == 3
-    assert_true(db.schema_version() == 3,
-        "schema_version should be 3 after migrations, got " + std::to_string(db.schema_version()));
-    std::cout << "PASS: schema_version == 3\n";
+    assert_true(db.schema_version() == 4,
+        "schema_version should be 4 after migrations, got " + std::to_string(db.schema_version()));
+    std::cout << "PASS: schema_version == 4\n";
 
     // Test: symbols table columns
     {
