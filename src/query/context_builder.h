@@ -21,10 +21,34 @@ struct ContextResponse {
     int estimated_tokens = 0;  // text.size() / 4
 };
 
+/// Detailed info about a single symbol (for get_function_detail RPC).
+struct SymbolInfo {
+    int64_t id = 0;
+    std::string name;
+    std::string kind;
+    std::string signature;
+    std::string documentation;
+    std::string file_path;
+    int line_start = 0;
+    int line_end = 0;
+    bool found = false;
+};
+
 class ContextBuilder {
 public:
     explicit ContextBuilder(SQLite::Database& db);
     ContextResponse build(const ContextRequest& req);
+
+    /// Look up a symbol by name, optionally filtered by file_path.
+    /// Returns SymbolInfo with found=false if no match.
+    SymbolInfo find_symbol(const std::string& name,
+                           const std::string& file_path = "");
+
+    /// Return names of all functions/methods called by symbol_id.
+    std::vector<std::string> get_callee_names(int64_t symbol_id);
+
+    /// Return names of all callers of symbol_id.
+    std::vector<std::string> get_caller_names(int64_t symbol_id);
 
 private:
     struct SymbolRow {
@@ -37,9 +61,6 @@ private:
                                  const std::vector<SymbolRow>& symbols);
     std::string format_detailed(const std::string& file_path,
                                 const std::vector<SymbolRow>& symbols);
-
-    std::vector<std::string> get_callee_names(int64_t symbol_id);
-    std::vector<std::string> get_caller_names(int64_t symbol_id);
 
     SQLite::Database& db_;
 };

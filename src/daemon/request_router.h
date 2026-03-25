@@ -37,6 +37,7 @@ public:
 
 private:
     Coordinator& coordinator_;
+    SQLite::Database& db_;
     std::unique_ptr<SearchEngine> search_engine_;
     std::unique_ptr<ContextBuilder> context_builder_;
 };
