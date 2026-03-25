@@ -49,6 +49,7 @@ target_link_libraries(codetldr_daemon
 
 add_library(codetldr_query
   src/query/search_engine.cpp
+  src/query/context_builder.cpp
 )
 target_include_directories(codetldr_query PUBLIC src)
 target_link_libraries(codetldr_query
@@ -109,3 +110,7 @@ add_test(NAME daemon_lifecycle COMMAND test_daemon_lifecycle)
 add_executable(test_fts5_search tests/test_fts5_search.cpp)
 target_link_libraries(test_fts5_search PRIVATE codetldr_query codetldr_foundation)
 add_test(NAME fts5_search COMMAND test_fts5_search)
+
+add_executable(test_context_builder tests/test_context_builder.cpp)
+target_link_libraries(test_context_builder PRIVATE codetldr_query codetldr_foundation)
+add_test(NAME context_builder COMMAND test_context_builder)
