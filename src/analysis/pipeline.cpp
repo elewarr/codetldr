@@ -76,6 +76,24 @@ AnalysisResult analyze_file(SQLite::Database& db,
     try {
         SQLite::Transaction txn(db);
 
+        // Check whether the symbols_fts FTS5 table exists (migration v4).
+        // Guard so this code is safe on databases that haven't yet been migrated.
+        bool has_fts = false;
+        try {
+            SQLite::Statement check(db, "SELECT 1 FROM symbols_fts LIMIT 0");
+            (void)check;
+            has_fts = true;
+        } catch (...) {}
+
+        // Delete stale FTS entries BEFORE deleting symbols (FTS content= does not auto-cascade).
+        if (has_fts) {
+            SQLite::Statement del_fts(db,
+                "DELETE FROM symbols_fts WHERE rowid IN "
+                "(SELECT id FROM symbols WHERE file_id = ?)");
+            del_fts.bind(1, file_id);
+            del_fts.exec();
+        }
+
         // Delete existing calls for this file first (FK may not cascade on non-WAL connections)
         {
             SQLite::Statement del_calls(db, "DELETE FROM calls WHERE file_id = ?");
@@ -111,6 +129,16 @@ AnalysisResult analyze_file(SQLite::Database& db,
             else                            ins_sym.bind(7);  // NULL
             ins_sym.exec();
             sym_name_to_id[sym.name] = db.getLastInsertRowid();
+        }
+
+        // Sync FTS5 index for this file's new symbols (after all symbols inserted).
+        if (has_fts) {
+            SQLite::Statement ins_fts(db,
+                "INSERT INTO symbols_fts(rowid, name, signature, documentation) "
+                "SELECT id, name, COALESCE(signature,''), COALESCE(documentation,'') "
+                "FROM symbols WHERE file_id = ?");
+            ins_fts.bind(1, file_id);
+            ins_fts.exec();
         }
 
         // Insert calls with resolved IDs where possible
