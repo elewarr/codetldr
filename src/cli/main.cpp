@@ -2,6 +2,7 @@
 #include "daemon/daemonize.h"
 #include "daemon/status.h"
 #include "config/project_dir.h"
+#include "cli/search_cmd.h"
 
 #include <CLI/CLI.hpp>
 #include <nlohmann/json.hpp>
@@ -207,6 +208,8 @@ int main(int argc, char* argv[]) {
     auto* status_cmd = app.add_subcommand("status", "Show daemon status");
     status_cmd->add_option("--project-root", project_root_str,
                            "Path to the project root (default: auto-detect git root or cwd)");
+    bool status_json = false;
+    status_cmd->add_flag("--json", status_json, "Output as JSON");
 
     status_cmd->callback([&]() {
         fs::path project_root = resolve_project_root();
@@ -220,7 +223,11 @@ int main(int argc, char* argv[]) {
             try {
                 auto response = client.call("get_status");
                 if (response.contains("result")) {
-                    print_status(response["result"]);
+                    if (status_json) {
+                        std::cout << response["result"].dump(2) << "\n";
+                    } else {
+                        print_status(response["result"]);
+                    }
                 } else {
                     std::cout << "Daemon running (status unavailable)\n";
                 }
@@ -241,7 +248,12 @@ int main(int argc, char* argv[]) {
                 j["files_indexed"] = ds.files_indexed;
                 j["files_total"]   = ds.files_total;
                 j["uptime_seconds"] = ds.uptime_seconds;
-                print_status(j, /*offline=*/true);
+                if (status_json) {
+                    j["offline"] = true;
+                    std::cout << j.dump(2) << "\n";
+                } else {
+                    print_status(j, /*offline=*/true);
+                }
                 return;
             } catch (...) {
                 // Fall through
@@ -249,8 +261,19 @@ int main(int argc, char* argv[]) {
         }
 
         // No info available
-        std::cout << "Daemon not running\n";
+        if (status_json) {
+            nlohmann::json j;
+            j["state"] = "not_running";
+            std::cout << j.dump(2) << "\n";
+        } else {
+            std::cout << "Daemon not running\n";
+        }
     });
+
+    // =========================================================
+    // Subcommand: search (registered from search_cmd.cpp)
+    // =========================================================
+    register_search_cmd(app, project_root_str);
 
     CLI11_PARSE(app, argc, argv);
     return 0;

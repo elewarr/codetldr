@@ -59,8 +59,11 @@ target_link_libraries(codetldr_query
 add_executable(codetldr-daemon src/daemon/main.cpp)
 target_link_libraries(codetldr-daemon PRIVATE codetldr_daemon)
 
-add_executable(codetldr src/cli/main.cpp)
+add_executable(codetldr src/cli/main.cpp src/cli/search_cmd.cpp)
 target_link_libraries(codetldr PRIVATE codetldr_daemon)
+
+add_executable(codetldr-mcp src/mcp/main.cpp)
+target_link_libraries(codetldr-mcp PRIVATE codetldr_daemon)
 
 enable_testing()
 
