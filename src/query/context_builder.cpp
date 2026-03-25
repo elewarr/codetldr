@@ -184,6 +184,57 @@ std::string ContextBuilder::format_detailed(const std::string& file_path,
     return out;
 }
 
+SymbolInfo ContextBuilder::find_symbol(const std::string& name,
+                                        const std::string& file_path) {
+    SymbolInfo info;
+    info.found = false;
+
+    if (file_path.empty()) {
+        SQLite::Statement q(db_,
+            "SELECT s.id, s.name, s.kind, COALESCE(s.signature,''), "
+            "       COALESCE(s.documentation,''), f.path, s.line_start, s.line_end "
+            "FROM symbols s "
+            "JOIN files f ON f.id = s.file_id "
+            "WHERE s.name = ? "
+            "LIMIT 1");
+        q.bind(1, name);
+        if (q.executeStep()) {
+            info.id            = q.getColumn(0).getInt64();
+            info.name          = q.getColumn(1).getString();
+            info.kind          = q.getColumn(2).getString();
+            info.signature     = q.getColumn(3).getString();
+            info.documentation = q.getColumn(4).getString();
+            info.file_path     = q.getColumn(5).getString();
+            info.line_start    = q.getColumn(6).getInt();
+            info.line_end      = q.getColumn(7).getInt();
+            info.found = true;
+        }
+    } else {
+        SQLite::Statement q(db_,
+            "SELECT s.id, s.name, s.kind, COALESCE(s.signature,''), "
+            "       COALESCE(s.documentation,''), f.path, s.line_start, s.line_end "
+            "FROM symbols s "
+            "JOIN files f ON f.id = s.file_id "
+            "WHERE s.name = ? AND f.path = ? "
+            "LIMIT 1");
+        q.bind(1, name);
+        q.bind(2, file_path);
+        if (q.executeStep()) {
+            info.id            = q.getColumn(0).getInt64();
+            info.name          = q.getColumn(1).getString();
+            info.kind          = q.getColumn(2).getString();
+            info.signature     = q.getColumn(3).getString();
+            info.documentation = q.getColumn(4).getString();
+            info.file_path     = q.getColumn(5).getString();
+            info.line_start    = q.getColumn(6).getInt();
+            info.line_end      = q.getColumn(7).getInt();
+            info.found = true;
+        }
+    }
+
+    return info;
+}
+
 std::vector<std::string> ContextBuilder::get_callee_names(int64_t symbol_id) {
     std::vector<std::string> names;
     SQLite::Statement q(db_,
