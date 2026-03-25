@@ -3,6 +3,7 @@
 #include "daemon/request_router.h"
 #include "daemon/status.h"
 #include "watcher/file_watcher.h"
+#include "watcher/ignore_filter.h"
 #include "watcher/debouncer.h"
 #include <nlohmann/json.hpp>
 #include <filesystem>
@@ -61,6 +62,9 @@ public:
     // Return current daemon status as a JSON object (for get_status RPC).
     nlohmann::json get_status_json();
 
+    // Return per-language capability matrix (for get_project_overview and get_status RPC).
+    nlohmann::json get_language_support() const;
+
     // Wakeup pipe read fd: for external threads (watcher) to add
     // to their own poll() set to wake the coordinator loop.
     int wakeup_pipe_read_fd() const { return wakeup_pipe_[0]; }
@@ -82,6 +86,9 @@ private:
     IpcServer ipc_server_;
     std::unique_ptr<RequestRouter> router_;
     std::unique_ptr<StatusWriter> status_writer_;
+
+    // Ignore filter (loaded from .codetldrignore or defaults)
+    IgnoreFilter ignore_filter_;
 
     // File watching + debouncing
     FileWatcher file_watcher_;

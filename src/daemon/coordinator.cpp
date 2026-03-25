@@ -35,6 +35,7 @@ Coordinator::Coordinator(const std::filesystem::path& project_root,
     , registry_(registry)
     , sock_path_(sock_path)
     , idle_timeout_(idle_timeout)
+    , ignore_filter_(IgnoreFilter::from_project_root(project_root))
     , file_watcher_(
         // on_event: push path to thread-safe queue
         [this](std::string path) {
@@ -96,6 +97,9 @@ void Coordinator::run() {
         throw std::runtime_error("Coordinator: another daemon is already running at " +
                                  sock_path_.string());
     }
+
+    // Wire ignore filter into file watcher before starting
+    file_watcher_.set_ignore_filter(&ignore_filter_);
 
     // Start file watcher
     file_watcher_.start(project_root_);
@@ -244,6 +248,21 @@ void Coordinator::request_stop() {
     notify_wakeup();
 }
 
+nlohmann::json Coordinator::get_language_support() const {
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto& lang : registry_.language_names()) {
+        nlohmann::json entry;
+        entry["language"]     = lang;
+        entry["l1_ast"]       = true;   // Tree-sitter L1 always available
+        entry["l2_call_graph"] = true;  // Approximate call graph via Tree-sitter
+        entry["l3_cfg"]       = false;  // Control flow graph not yet implemented
+        entry["l4_dfg"]       = false;  // Data flow graph not yet implemented
+        entry["l5_pdg"]       = false;  // Program dependency graph not yet implemented
+        arr.push_back(std::move(entry));
+    }
+    return arr;
+}
+
 nlohmann::json Coordinator::get_status_json() {
     nlohmann::json j;
     j["state"]            = to_string(current_status_.state);
@@ -255,6 +274,8 @@ nlohmann::json Coordinator::get_status_json() {
     j["uptime_seconds"]   = current_status_.uptime_seconds;
     // File watcher state
     j["watcher_active"]   = (file_watcher_.is_active());
+    // Language support matrix
+    j["language_support"] = get_language_support();
     return j;
 }
 
