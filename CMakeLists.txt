@@ -47,6 +47,13 @@ target_link_libraries(codetldr_daemon
   PUBLIC codetldr_foundation codetldr_analysis nlohmann_json::nlohmann_json
          spdlog::spdlog CLI11::CLI11 efsw-static)
 
+add_library(codetldr_query
+  src/query/search_engine.cpp
+)
+target_include_directories(codetldr_query PUBLIC src)
+target_link_libraries(codetldr_query
+  PUBLIC codetldr_foundation nlohmann_json::nlohmann_json)
+
 add_executable(codetldr-daemon src/daemon/main.cpp)
 target_link_libraries(codetldr-daemon PRIVATE codetldr_daemon)
 
@@ -98,3 +105,7 @@ add_test(NAME file_watcher COMMAND test_file_watcher)
 add_executable(test_daemon_lifecycle tests/test_daemon_lifecycle.cpp)
 target_link_libraries(test_daemon_lifecycle PRIVATE codetldr_daemon)
 add_test(NAME daemon_lifecycle COMMAND test_daemon_lifecycle)
+
+add_executable(test_fts5_search tests/test_fts5_search.cpp)
+target_link_libraries(test_fts5_search PRIVATE codetldr_query codetldr_foundation)
+add_test(NAME fts5_search COMMAND test_fts5_search)
