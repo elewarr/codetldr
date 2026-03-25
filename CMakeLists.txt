@@ -51,3 +51,7 @@ add_test(NAME schema_v2v3 COMMAND test_schema_v2v3)
 add_executable(test_tree_sitter_parser tests/test_tree_sitter_parser.cpp)
 target_link_libraries(test_tree_sitter_parser PRIVATE codetldr_analysis)
 add_test(NAME tree_sitter_parser COMMAND test_tree_sitter_parser)
+
+add_executable(test_symbol_extractor tests/test_symbol_extractor.cpp)
+target_link_libraries(test_symbol_extractor PRIVATE codetldr_analysis)
+add_test(NAME symbol_extractor COMMAND test_symbol_extractor)
