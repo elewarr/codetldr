@@ -94,3 +94,7 @@ add_test(NAME debouncer COMMAND test_debouncer)
 add_executable(test_file_watcher tests/test_file_watcher.cpp)
 target_link_libraries(test_file_watcher PRIVATE codetldr_daemon)
 add_test(NAME file_watcher COMMAND test_file_watcher)
+
+add_executable(test_daemon_lifecycle tests/test_daemon_lifecycle.cpp)
+target_link_libraries(test_daemon_lifecycle PRIVATE codetldr_daemon)
+add_test(NAME daemon_lifecycle COMMAND test_daemon_lifecycle)
