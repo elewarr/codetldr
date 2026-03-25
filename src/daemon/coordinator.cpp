@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <filesystem>
 #include <algorithm>
+#include <unordered_set>
 
 namespace {
 // Global stop flag — set by signal handlers (SIGTERM/SIGINT)
@@ -21,6 +22,12 @@ std::atomic<bool> g_stop{false};
 void signal_handler(int /*sig*/) {
     g_stop.store(true, std::memory_order_relaxed);
 }
+
+// Source file extensions to index during initial scan (mirrors FileWatcher::is_source_file())
+static const std::unordered_set<std::string> kScanExtensions = {
+    ".cpp", ".h", ".py", ".js", ".ts", ".java", ".kt", ".swift",
+    ".m", ".rs", ".c", ".cc", ".cxx", ".hpp", ".tsx", ".jsx"
+};
 } // anonymous namespace
 
 namespace codetldr {
@@ -103,6 +110,54 @@ void Coordinator::run() {
 
     // Start file watcher
     file_watcher_.start(project_root_);
+
+    // Enter kInitialScan state before scanning
+    current_status_.state = DaemonState::kInitialScan;
+    current_status_.pid = ::getpid();
+    try { status_writer_->write(current_status_); } catch (...) {}
+
+    // Initial full-project scan: index all existing source files
+    spdlog::info("Coordinator: starting initial scan of {}", project_root_.string());
+    int scan_count = 0;
+    std::error_code ec;
+    for (auto it = std::filesystem::recursive_directory_iterator(
+             project_root_, std::filesystem::directory_options::skip_permission_denied, ec);
+         it != std::filesystem::recursive_directory_iterator(); it.increment(ec))
+    {
+        if (ec) { ec.clear(); continue; }
+        if (!it->is_regular_file()) continue;
+
+        const auto& path = it->path();
+        std::string ext = path.extension().string();
+        if (kScanExtensions.count(ext) == 0) continue;
+
+        // Check ignore filter
+        std::filesystem::path rel_path;
+        try {
+            rel_path = std::filesystem::relative(path, project_root_);
+        } catch (...) {
+            continue;
+        }
+        if (ignore_filter_.should_ignore(rel_path)) continue;
+
+        // Analyze file
+        try {
+            auto result = analyze_file(db_, registry_, path);
+            if (result.success) {
+                scan_count++;
+                current_status_.files_indexed = scan_count;
+            } else {
+                spdlog::warn("Coordinator: initial scan failed for {}: {}", path.string(), result.error);
+            }
+        } catch (const std::exception& ex) {
+            spdlog::error("Coordinator: initial scan exception for {}: {}", path.string(), ex.what());
+        }
+    }
+
+    // WAL checkpoint after initial scan
+    try { db_.exec("PRAGMA wal_checkpoint(PASSIVE)"); } catch (...) {}
+    spdlog::info("Coordinator: initial scan complete, indexed {} files", scan_count);
+    current_status_.files_total = scan_count;
 
     // Update status to idle
     current_status_.state = DaemonState::kIdle;
