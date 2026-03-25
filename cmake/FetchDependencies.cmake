@@ -217,3 +217,15 @@ FetchContent_Declare(ts_objc
 )
 FetchContent_MakeAvailable(ts_objc)
 add_tree_sitter_grammar(objc ${ts_objc_SOURCE_DIR})
+
+# ============================================================
+# efsw — cross-platform file system watcher
+# macOS FSEvents + Linux inotify in one API
+# ============================================================
+FetchContent_Declare(efsw
+    GIT_REPOSITORY https://github.com/SpartanJ/efsw.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+set(EFSW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(efsw)
