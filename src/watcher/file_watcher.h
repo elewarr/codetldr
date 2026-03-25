@@ -1,4 +1,5 @@
 #pragma once
+#include "watcher/ignore_filter.h"
 #include <efsw/efsw.hpp>
 #include <filesystem>
 #include <functional>
@@ -31,6 +32,10 @@ public:
     // Remove watch and stop efsw watcher thread.
     void stop();
 
+    // Set the ignore filter. Must be called before start(). The pointer must remain valid
+    // for the lifetime of the FileWatcher (owned by Coordinator).
+    void set_ignore_filter(const IgnoreFilter* filter);
+
     // Returns true if the watcher is currently active (started and not stopped).
     bool is_active() const { return efsw_watcher_ != nullptr; }
 
@@ -48,12 +53,20 @@ private:
                               efsw::Action action,
                               std::string oldFilename = "") override;
 
+        // Set the project root (to compute relative paths for ignore checks)
+        void set_project_root(const std::filesystem::path& root) { project_root_ = root; }
+
+        // Set the ignore filter (non-owning pointer)
+        void set_ignore_filter(const IgnoreFilter* filter) { ignore_filter_ = filter; }
+
     private:
         // Return true if the extension is a supported source file type
         static bool is_source_file(const std::string& filename);
 
         std::function<void(std::string)> on_event_;
         std::function<void()> on_wakeup_;
+        std::filesystem::path project_root_;
+        const IgnoreFilter* ignore_filter_ = nullptr;
     };
 
     std::function<void(std::string)> on_event_;
@@ -61,6 +74,7 @@ private:
     std::unique_ptr<efsw::FileWatcher> efsw_watcher_;
     std::unique_ptr<WatcherListener> listener_;
     efsw::WatchID watch_id_ = 0;
+    const IgnoreFilter* ignore_filter_ = nullptr;
 };
 
 } // namespace codetldr

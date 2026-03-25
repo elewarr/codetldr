@@ -52,6 +52,21 @@ void FileWatcher::WatcherListener::handleFileAction(
         }
         full_path += filename;
 
+        // Check ignore filter if set — compute relative path from project root
+        if (ignore_filter_ && !project_root_.empty()) {
+            std::filesystem::path abs_path(full_path);
+            std::filesystem::path rel_path;
+            // Attempt to make relative — if not under project root, skip
+            try {
+                rel_path = std::filesystem::relative(abs_path, project_root_);
+            } catch (...) {
+                rel_path = abs_path;
+            }
+            if (ignore_filter_->should_ignore(rel_path)) {
+                return;
+            }
+        }
+
         // Invoke callbacks — expected to be thread-safe (pipe write or concurrent queue push)
         on_event_(full_path);
         on_wakeup_();
@@ -69,8 +84,19 @@ FileWatcher::~FileWatcher() {
     stop();
 }
 
+void FileWatcher::set_ignore_filter(const IgnoreFilter* filter) {
+    ignore_filter_ = filter;
+}
+
 void FileWatcher::start(const std::filesystem::path& project_root) {
     listener_ = std::make_unique<WatcherListener>(on_event_, on_wakeup_);
+
+    // Wire ignore filter and project root into listener
+    listener_->set_project_root(project_root);
+    if (ignore_filter_) {
+        listener_->set_ignore_filter(ignore_filter_);
+    }
+
     efsw_watcher_ = std::make_unique<efsw::FileWatcher>();
 
     // Add recursive watch

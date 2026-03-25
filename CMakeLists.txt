@@ -41,6 +41,7 @@ add_library(codetldr_daemon
   src/daemon/coordinator.cpp
   src/watcher/debouncer.cpp
   src/watcher/file_watcher.cpp
+  src/watcher/ignore_filter.cpp
 )
 target_include_directories(codetldr_daemon PUBLIC src)
 target_link_libraries(codetldr_daemon
@@ -118,3 +119,11 @@ add_test(NAME context_builder COMMAND test_context_builder)
 add_executable(test_query_rpc tests/test_query_rpc.cpp)
 target_link_libraries(test_query_rpc PRIVATE codetldr_query codetldr_foundation)
 add_test(NAME query_rpc COMMAND test_query_rpc)
+
+add_executable(test_ignore_filter tests/test_ignore_filter.cpp)
+target_link_libraries(test_ignore_filter PRIVATE codetldr_daemon)
+add_test(NAME ignore_filter COMMAND test_ignore_filter)
+
+add_executable(test_new_rpc_methods tests/test_new_rpc_methods.cpp)
+target_link_libraries(test_new_rpc_methods PRIVATE codetldr_daemon codetldr_query codetldr_foundation)
+add_test(NAME new_rpc_methods COMMAND test_new_rpc_methods)
