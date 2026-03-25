@@ -3,6 +3,7 @@
 #include "daemon/status.h"
 #include "config/project_dir.h"
 #include "cli/search_cmd.h"
+#include "cli/init_cmd.h"
 
 #include <CLI/CLI.hpp>
 #include <nlohmann/json.hpp>
@@ -274,6 +275,11 @@ int main(int argc, char* argv[]) {
     // Subcommand: search (registered from search_cmd.cpp)
     // =========================================================
     register_search_cmd(app, project_root_str);
+
+    // =========================================================
+    // Subcommand: init (registered from init_cmd.cpp)
+    // =========================================================
+    register_init_cmd(app, project_root_str);
 
     CLI11_PARSE(app, argc, argv);
     return 0;
