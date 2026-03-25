@@ -123,10 +123,12 @@ inline LanguageQueries objc() {
     return {
         // symbols -- ObjC grammar uses class_interface (not class_declaration)
         "(function_definition declarator: (function_declarator declarator: (identifier) @name)) @definition.function\n"
-        "(class_interface name: (identifier) @name) @definition.class\n"
-        "(protocol_declaration name: (identifier) @name) @definition.interface\n",
-        // calls -- message_expression with method field (not selector)
-        "(message_expression) @reference.call\n"
+        "(class_interface (identifier) @name) @definition.class\n"
+        "(protocol_declaration (identifier) @name) @definition.interface\n"
+        "(method_definition (identifier) @name) @definition.method\n",
+        // calls -- message_expression has method: (identifier) children; also C-style calls
+        "(message_expression method: (identifier) @name) @reference.call\n"
+        "(call_expression function: (identifier) @name) @reference.call\n"
     };
 }
 
