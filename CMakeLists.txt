@@ -39,11 +39,13 @@ add_library(codetldr_daemon
   src/daemon/daemon_client.cpp
   src/daemon/daemonize.cpp
   src/daemon/coordinator.cpp
+  src/watcher/debouncer.cpp
+  src/watcher/file_watcher.cpp
 )
 target_include_directories(codetldr_daemon PUBLIC src)
 target_link_libraries(codetldr_daemon
   PUBLIC codetldr_foundation codetldr_analysis nlohmann_json::nlohmann_json
-         spdlog::spdlog CLI11::CLI11)
+         spdlog::spdlog CLI11::CLI11 efsw-static)
 
 add_executable(codetldr-daemon src/daemon/main.cpp)
 target_link_libraries(codetldr-daemon PRIVATE codetldr_daemon)
@@ -81,3 +83,11 @@ add_test(NAME call_extractor COMMAND test_call_extractor)
 add_executable(test_daemon_ipc tests/test_daemon_ipc.cpp)
 target_link_libraries(test_daemon_ipc PRIVATE codetldr_daemon)
 add_test(NAME daemon_ipc COMMAND test_daemon_ipc)
+
+add_executable(test_debouncer tests/test_debouncer.cpp)
+target_link_libraries(test_debouncer PRIVATE codetldr_daemon)
+add_test(NAME debouncer COMMAND test_debouncer)
+
+add_executable(test_file_watcher tests/test_file_watcher.cpp)
+target_link_libraries(test_file_watcher PRIVATE codetldr_daemon)
+add_test(NAME file_watcher COMMAND test_file_watcher)
