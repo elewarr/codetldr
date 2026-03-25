@@ -50,6 +50,9 @@ target_link_libraries(codetldr_daemon
 add_executable(codetldr-daemon src/daemon/main.cpp)
 target_link_libraries(codetldr-daemon PRIVATE codetldr_daemon)
 
+add_executable(codetldr src/cli/main.cpp)
+target_link_libraries(codetldr PRIVATE codetldr_daemon)
+
 enable_testing()
 
 add_executable(test_xdg_paths tests/test_xdg_paths.cpp)
