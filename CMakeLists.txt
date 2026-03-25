@@ -22,6 +22,7 @@ target_link_libraries(codetldr_foundation
 add_library(codetldr_analysis
   src/analysis/tree_sitter/parser.cpp
   src/analysis/tree_sitter/language_registry.cpp
+  src/analysis/tree_sitter/extractor.cpp
 )
 target_include_directories(codetldr_analysis PUBLIC src)
 target_link_libraries(codetldr_analysis
