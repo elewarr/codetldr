@@ -21,6 +21,7 @@ target_link_libraries(codetldr_foundation
 
 add_library(codetldr_analysis
   src/analysis/tree_sitter/parser.cpp
+  src/analysis/tree_sitter/language_registry.cpp
 )
 target_include_directories(codetldr_analysis PUBLIC src)
 target_link_libraries(codetldr_analysis
@@ -46,3 +47,7 @@ add_test(NAME project_init COMMAND test_project_init)
 add_executable(test_schema_v2v3 tests/test_schema_v2v3.cpp)
 target_link_libraries(test_schema_v2v3 PRIVATE codetldr_foundation)
 add_test(NAME schema_v2v3 COMMAND test_schema_v2v3)
+
+add_executable(test_tree_sitter_parser tests/test_tree_sitter_parser.cpp)
+target_link_libraries(test_tree_sitter_parser PRIVATE codetldr_analysis)
+add_test(NAME tree_sitter_parser COMMAND test_tree_sitter_parser)
