@@ -31,6 +31,9 @@ public:
     // Remove watch and stop efsw watcher thread.
     void stop();
 
+    // Returns true if the watcher is currently active (started and not stopped).
+    bool is_active() const { return efsw_watcher_ != nullptr; }
+
 private:
     // Inner listener — implements efsw::FileWatchListener.
     // CRITICAL: handleFileAction MUST return immediately (no blocking I/O, no analysis, no DB access).
