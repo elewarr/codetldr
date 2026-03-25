@@ -56,3 +56,7 @@ add_test(NAME tree_sitter_parser COMMAND test_tree_sitter_parser)
 add_executable(test_symbol_extractor tests/test_symbol_extractor.cpp)
 target_link_libraries(test_symbol_extractor PRIVATE codetldr_analysis)
 add_test(NAME symbol_extractor COMMAND test_symbol_extractor)
+
+add_executable(test_call_extractor tests/test_call_extractor.cpp)
+target_link_libraries(test_call_extractor PRIVATE codetldr_analysis)
+add_test(NAME call_extractor COMMAND test_call_extractor)
