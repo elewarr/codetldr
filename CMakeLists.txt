@@ -32,6 +32,22 @@ target_link_libraries(codetldr_analysis
           ts_grammar_tsx ts_grammar_rust ts_grammar_c ts_grammar_cpp
           ts_grammar_java ts_grammar_kotlin ts_grammar_swift ts_grammar_objc)
 
+add_library(codetldr_daemon
+  src/daemon/status.cpp
+  src/daemon/ipc_server.cpp
+  src/daemon/request_router.cpp
+  src/daemon/daemon_client.cpp
+  src/daemon/daemonize.cpp
+  src/daemon/coordinator.cpp
+)
+target_include_directories(codetldr_daemon PUBLIC src)
+target_link_libraries(codetldr_daemon
+  PUBLIC codetldr_foundation codetldr_analysis nlohmann_json::nlohmann_json
+         spdlog::spdlog CLI11::CLI11)
+
+add_executable(codetldr-daemon src/daemon/main.cpp)
+target_link_libraries(codetldr-daemon PRIVATE codetldr_daemon)
+
 enable_testing()
 
 add_executable(test_xdg_paths tests/test_xdg_paths.cpp)
@@ -61,3 +77,7 @@ add_test(NAME symbol_extractor COMMAND test_symbol_extractor)
 add_executable(test_call_extractor tests/test_call_extractor.cpp)
 target_link_libraries(test_call_extractor PRIVATE codetldr_analysis)
 add_test(NAME call_extractor COMMAND test_call_extractor)
+
+add_executable(test_daemon_ipc tests/test_daemon_ipc.cpp)
+target_link_libraries(test_daemon_ipc PRIVATE codetldr_daemon)
+add_test(NAME daemon_ipc COMMAND test_daemon_ipc)
