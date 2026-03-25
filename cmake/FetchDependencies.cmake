@@ -11,6 +11,11 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(SQLiteCpp)
+# SQLiteCpp bundles its own sqlite3 source but does not propagate SQLITE_ENABLE_FTS5.
+# Add it explicitly to the sqlite3 compile target so FTS5 virtual tables work.
+if (TARGET sqlite3)
+    target_compile_definitions(sqlite3 PUBLIC SQLITE_ENABLE_FTS5)
+endif()
 
 # nlohmann/json 3.12.0
 set(JSON_BuildTests OFF CACHE BOOL "" FORCE)

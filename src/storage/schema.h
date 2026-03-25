@@ -48,6 +48,15 @@ inline const std::vector<std::pair<int, std::string_view>> kMigrations = {
         CREATE INDEX IF NOT EXISTS idx_calls_callee_name ON calls(callee_name);
         CREATE INDEX IF NOT EXISTS idx_calls_file ON calls(file_id);
     )sql"},
+    {4, R"sql(
+        CREATE VIRTUAL TABLE IF NOT EXISTS symbols_fts USING fts5(
+            name, signature, documentation,
+            content='symbols', content_rowid='id',
+            prefix='2 3', tokenize='unicode61'
+        );
+        INSERT INTO symbols_fts(rowid, name, signature, documentation)
+            SELECT id, name, COALESCE(signature,''), COALESCE(documentation,'') FROM symbols;
+    )sql"},
 };
 
 } // namespace codetldr
