@@ -186,7 +186,7 @@ static void test_4_unknown_method() {
 
     // Access router through coordinator via a direct dispatch test
     // We test the RequestRouter directly
-    codetldr::RequestRouter router(coord);
+    codetldr::RequestRouter router(coord, db.raw());
 
     nlohmann::json req;
     req["jsonrpc"] = "2.0";
@@ -220,7 +220,7 @@ static void test_5_stop_request() {
     registry.initialize();
 
     codetldr::Coordinator coord(tmp_dir, db.raw(), registry, sock_path);
-    codetldr::RequestRouter router(coord);
+    codetldr::RequestRouter router(coord, db.raw());
 
     nlohmann::json req;
     req["jsonrpc"] = "2.0";

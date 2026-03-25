@@ -44,8 +44,8 @@ add_library(codetldr_daemon
 )
 target_include_directories(codetldr_daemon PUBLIC src)
 target_link_libraries(codetldr_daemon
-  PUBLIC codetldr_foundation codetldr_analysis nlohmann_json::nlohmann_json
-         spdlog::spdlog CLI11::CLI11 efsw-static)
+  PUBLIC codetldr_foundation codetldr_analysis codetldr_query
+         nlohmann_json::nlohmann_json spdlog::spdlog CLI11::CLI11 efsw-static)
 
 add_library(codetldr_query
   src/query/search_engine.cpp
@@ -114,3 +114,7 @@ add_test(NAME fts5_search COMMAND test_fts5_search)
 add_executable(test_context_builder tests/test_context_builder.cpp)
 target_link_libraries(test_context_builder PRIVATE codetldr_query codetldr_foundation)
 add_test(NAME context_builder COMMAND test_context_builder)
+
+add_executable(test_query_rpc tests/test_query_rpc.cpp)
+target_link_libraries(test_query_rpc PRIVATE codetldr_query codetldr_foundation)
+add_test(NAME query_rpc COMMAND test_query_rpc)
