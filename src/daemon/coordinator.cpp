@@ -66,8 +66,8 @@ Coordinator::Coordinator(const std::filesystem::path& project_root,
     std::filesystem::path status_path = project_root_ / ".codetldr" / "status.json";
     status_writer_ = std::make_unique<StatusWriter>(status_path);
 
-    // Set up RequestRouter
-    router_ = std::make_unique<RequestRouter>(*this);
+    // Set up RequestRouter (pass db_ for SearchEngine and ContextBuilder)
+    router_ = std::make_unique<RequestRouter>(*this, db_);
 }
 
 Coordinator::~Coordinator() {
