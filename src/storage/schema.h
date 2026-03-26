@@ -57,6 +57,19 @@ inline const std::vector<std::pair<int, std::string_view>> kMigrations = {
         INSERT INTO symbols_fts(rowid, name, signature, documentation)
             SELECT id, name, COALESCE(signature,''), COALESCE(documentation,'') FROM symbols;
     )sql"},
+    {5, R"sql(
+        CREATE TABLE IF NOT EXISTS cfg_nodes (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_id    INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+            symbol_id  INTEGER REFERENCES symbols(id) ON DELETE CASCADE,
+            node_type  TEXT NOT NULL,
+            condition  TEXT,
+            line       INTEGER NOT NULL,
+            depth      INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_cfg_nodes_file   ON cfg_nodes(file_id);
+        CREATE INDEX IF NOT EXISTS idx_cfg_nodes_symbol ON cfg_nodes(symbol_id);
+    )sql"},
 };
 
 } // namespace codetldr
