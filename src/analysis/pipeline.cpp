@@ -18,12 +18,12 @@ AnalysisResult analyze_file(SQLite::Database& db,
                               const std::filesystem::path& file_path) {
     // a. Read file content from disk
     if (!std::filesystem::exists(file_path)) {
-        return {0, 0, 0, false, "file not found: " + file_path.string()};
+        return {0, 0, 0, 0, false, "file not found: " + file_path.string()};
     }
 
     std::ifstream f(file_path);
     if (!f.is_open()) {
-        return {0, 0, 0, false, "cannot open file: " + file_path.string()};
+        return {0, 0, 0, 0, false, "cannot open file: " + file_path.string()};
     }
     std::ostringstream ss;
     ss << f.rdbuf();
@@ -33,7 +33,7 @@ AnalysisResult analyze_file(SQLite::Database& db,
     std::string ext = file_path.extension().string();
     const auto* entry = registry.for_extension(ext);
     if (!entry) {
-        return {0, 0, 0, false, "unsupported extension: " + ext};
+        return {0, 0, 0, 0, false, "unsupported extension: " + ext};
     }
 
     // c. Upsert the file into the `files` table
@@ -57,7 +57,7 @@ AnalysisResult analyze_file(SQLite::Database& db,
         SQLite::Statement get_id(db, "SELECT id FROM files WHERE path = ?");
         get_id.bind(1, file_path.string());
         if (!get_id.executeStep()) {
-            return {0, 0, 0, false, "failed to get file_id for: " + file_path.string()};
+            return {0, 0, 0, 0, false, "failed to get file_id for: " + file_path.string()};
         }
         file_id = get_id.getColumn(0).getInt64();
     }
@@ -65,7 +65,7 @@ AnalysisResult analyze_file(SQLite::Database& db,
     // d. Parse source with Tree-sitter
     auto tree = parse_source(entry->language, content);
     if (!tree) {
-        return {0, 0, 0, false, "parse failed for " + file_path.string()};
+        return {0, 0, 0, 0, false, "parse failed for " + file_path.string()};
     }
 
     // e. Extract symbols, calls, and CFG nodes
@@ -76,6 +76,12 @@ AnalysisResult analyze_file(SQLite::Database& db,
     std::vector<CfgNode> cfg_nodes_vec;
     if (entry->cfg_query) {
         cfg_nodes_vec = extract_cfg_nodes(tree.get(), entry->cfg_query.get(), content, symbols);
+    }
+
+    // f3. Extract DFG edges (if language supports it)
+    std::vector<DfgEdge> dfg_edges_vec;
+    if (entry->dfg_query) {
+        dfg_edges_vec = extract_dfg_edges(tree.get(), entry->dfg_query.get(), content, symbols);
     }
 
     // f. Persist to SQLite inside a transaction (delete + re-insert = upsert semantics)
@@ -205,13 +211,43 @@ AnalysisResult analyze_file(SQLite::Database& db,
             }
         }
 
+        // Delete stale DFG edges for this file
+        {
+            SQLite::Statement del_dfg(db, "DELETE FROM dfg_edges WHERE file_id = ?");
+            del_dfg.bind(1, file_id);
+            del_dfg.exec();
+        }
+
+        // Insert DFG edges
+        if (!dfg_edges_vec.empty()) {
+            SQLite::Statement ins_dfg(db, R"sql(
+                INSERT INTO dfg_edges(file_id, symbol_id, edge_type, lhs, rhs_snippet, line)
+                VALUES (?, ?, ?, ?, ?, ?)
+            )sql");
+
+            for (const auto& edge : dfg_edges_vec) {
+                ins_dfg.reset();
+                ins_dfg.bind(1, file_id);
+                auto sym_it = sym_name_to_id.find(edge.symbol_name);
+                if (sym_it != sym_name_to_id.end()) ins_dfg.bind(2, sym_it->second);
+                else                                ins_dfg.bind(2);  // NULL
+                ins_dfg.bind(3, edge.edge_type);
+                ins_dfg.bind(4, edge.lhs);
+                if (!edge.rhs_snippet.empty()) ins_dfg.bind(5, edge.rhs_snippet);
+                else                           ins_dfg.bind(5);  // NULL for parameter edges
+                ins_dfg.bind(6, edge.line);
+                ins_dfg.exec();
+            }
+        }
+
         txn.commit();
     } catch (const SQLite::Exception& e) {
-        return {0, 0, 0, false, std::string("SQLite error: ") + e.what()};
+        return {0, 0, 0, 0, false, std::string("SQLite error: ") + e.what()};
     }
 
     return {static_cast<int>(symbols.size()), static_cast<int>(calls.size()),
-            static_cast<int>(cfg_nodes_vec.size()), true, {}};
+            static_cast<int>(cfg_nodes_vec.size()), static_cast<int>(dfg_edges_vec.size()),
+            true, {}};
 }
 
 } // namespace codetldr
