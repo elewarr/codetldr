@@ -12,6 +12,7 @@ struct LanguageEntry {
     TsQueryPtr symbol_query;    // Compiled symbol query
     TsQueryPtr call_query;      // Compiled call query
     TsQueryPtr cfg_query;       // Compiled CFG query (nullptr for non-CFG languages)
+    TsQueryPtr dfg_query;       // Compiled DFG query (nullptr for non-DFG languages)
 };
 
 class LanguageRegistry {
@@ -30,7 +31,8 @@ private:
                            const TSLanguage* lang,
                            const char* symbol_query_str,
                            const char* call_query_str,
-                           const char* cfg_query_str);
+                           const char* cfg_query_str,
+                           const char* dfg_query_str);
 
     std::unordered_map<std::string, LanguageEntry> entries_;    // name -> entry
     std::unordered_map<std::string, std::string> ext_to_lang_;  // ".py" -> "python"

@@ -43,10 +43,10 @@ int main() {
     // Open database - runs migrations
     auto db = codetldr::Database::open(db_path);
 
-    // Test: schema version == 5 (migration v5 adds cfg_nodes table)
-    assert_true(db.schema_version() == 5,
-        "schema_version should be 5 after migrations, got " + std::to_string(db.schema_version()));
-    std::cout << "PASS: schema_version == 5\n";
+    // Test: schema version == 6 (migration v6 adds dfg_edges table)
+    assert_true(db.schema_version() == 6,
+        "schema_version should be 6 after migrations, got " + std::to_string(db.schema_version()));
+    std::cout << "PASS: schema_version == 6\n";
 
     // Test: symbols table columns
     {
@@ -89,6 +89,21 @@ int main() {
         assert_true(has_column(cols, "line"), "cfg_nodes.line missing");
         assert_true(has_column(cols, "depth"), "cfg_nodes.depth missing");
         std::cout << "PASS: cfg_nodes table has correct columns\n";
+    }
+
+    // Test: dfg_edges table columns (migration v6)
+    {
+        auto cols = table_columns(db.raw(), "dfg_edges");
+        assert_true(!cols.empty(), "dfg_edges table should exist");
+        assert_true(has_column(cols, "id"), "dfg_edges.id missing");
+        assert_true(has_column(cols, "file_id"), "dfg_edges.file_id missing");
+        assert_true(has_column(cols, "symbol_id"), "dfg_edges.symbol_id missing");
+        assert_true(has_column(cols, "edge_type"), "dfg_edges.edge_type missing");
+        assert_true(has_column(cols, "lhs"), "dfg_edges.lhs missing");
+        assert_true(has_column(cols, "rhs_snippet"), "dfg_edges.rhs_snippet missing");
+        assert_true(has_column(cols, "line"), "dfg_edges.line missing");
+        assert_true(cols.size() == 7, "dfg_edges should have 7 columns");
+        std::cout << "PASS: dfg_edges table has correct columns\n";
     }
 
     // Test: INSERT into files, then symbols, then calls
