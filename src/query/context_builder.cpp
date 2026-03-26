@@ -258,4 +258,38 @@ std::vector<std::string> ContextBuilder::get_caller_names(int64_t symbol_id) {
     return names;
 }
 
+nlohmann::json ContextBuilder::get_control_flow(int64_t symbol_id) {
+    nlohmann::json arr = nlohmann::json::array();
+    SQLite::Statement q(db_,
+        "SELECT node_type, COALESCE(condition,''), line, depth "
+        "FROM cfg_nodes WHERE symbol_id = ? ORDER BY line ASC");
+    q.bind(1, symbol_id);
+    while (q.executeStep()) {
+        nlohmann::json node;
+        node["type"]      = q.getColumn(0).getString();
+        node["condition"] = q.getColumn(1).getString();
+        node["line"]      = q.getColumn(2).getInt();
+        node["depth"]     = q.getColumn(3).getInt();
+        arr.push_back(std::move(node));
+    }
+    return arr;
+}
+
+nlohmann::json ContextBuilder::get_data_flow(int64_t symbol_id) {
+    nlohmann::json arr = nlohmann::json::array();
+    SQLite::Statement q(db_,
+        "SELECT edge_type, lhs, COALESCE(rhs_snippet,''), line "
+        "FROM dfg_edges WHERE symbol_id = ? ORDER BY line ASC");
+    q.bind(1, symbol_id);
+    while (q.executeStep()) {
+        nlohmann::json edge;
+        edge["type"]        = q.getColumn(0).getString();
+        edge["lhs"]         = q.getColumn(1).getString();
+        edge["rhs_snippet"] = q.getColumn(2).getString();
+        edge["line"]        = q.getColumn(3).getInt();
+        arr.push_back(std::move(edge));
+    }
+    return arr;
+}
+
 } // namespace codetldr
