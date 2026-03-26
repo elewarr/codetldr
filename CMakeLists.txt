@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+find_package(Threads REQUIRED)
+
 include(cmake/FetchDependencies.cmake)
 
 add_library(codetldr_foundation
@@ -18,6 +20,9 @@ add_library(codetldr_foundation
 target_include_directories(codetldr_foundation PUBLIC src)
 target_link_libraries(codetldr_foundation
   PUBLIC SQLiteCpp spdlog::spdlog nlohmann_json::nlohmann_json)
+if(CMAKE_DL_LIBS)
+  target_link_libraries(codetldr_foundation PRIVATE ${CMAKE_DL_LIBS})
+endif()
 
 add_library(codetldr_analysis
   src/analysis/tree_sitter/parser.cpp
@@ -46,7 +51,7 @@ add_library(codetldr_daemon
 target_include_directories(codetldr_daemon PUBLIC src)
 target_link_libraries(codetldr_daemon
   PUBLIC codetldr_foundation codetldr_analysis codetldr_query
-         nlohmann_json::nlohmann_json spdlog::spdlog CLI11::CLI11 efsw-static)
+         nlohmann_json::nlohmann_json spdlog::spdlog CLI11::CLI11 efsw-static Threads::Threads)
 
 add_library(codetldr_query
   src/query/search_engine.cpp
