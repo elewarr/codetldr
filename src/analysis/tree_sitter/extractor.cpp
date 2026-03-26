@@ -575,4 +575,190 @@ std::vector<CfgNode> extract_cfg_nodes(const TSTree* tree,
     return results;
 }
 
+// ---------------------------------------------------------------------------
+// DFG helpers
+// ---------------------------------------------------------------------------
+
+// expand_lhs: given a TSNode representing an LHS expression, returns all
+// identifier names it defines (handles destructuring patterns).
+static std::vector<std::string> expand_lhs(TSNode node, const std::string& source) {
+    std::vector<std::string> names;
+    const char* t = ts_node_type(node);
+
+    if (std::strcmp(t, "identifier") == 0) {
+        std::string name = node_text(node, source);
+        if (!name.empty()) names.push_back(std::move(name));
+        return names;
+    }
+
+    // Destructuring patterns: tuple_pattern, list_pattern (Python),
+    // array_pattern, object_pattern (JS), structured_binding_declarator (C++)
+    if (std::strcmp(t, "tuple_pattern") == 0 ||
+        std::strcmp(t, "list_pattern")  == 0 ||
+        std::strcmp(t, "array_pattern") == 0 ||
+        std::strcmp(t, "object_pattern") == 0 ||
+        std::strcmp(t, "structured_binding_declarator") == 0) {
+        uint32_t count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < count; ++i) {
+            TSNode child = ts_node_child(node, i);
+            if (std::strcmp(ts_node_type(child), "identifier") == 0) {
+                std::string name = node_text(child, source);
+                if (!name.empty()) names.push_back(std::move(name));
+            }
+        }
+        return names;
+    }
+
+    // Fallback: use the full text as-is (e.g., member access)
+    std::string text = node_text(node, source);
+    if (!text.empty()) names.push_back(std::move(text));
+    return names;
+}
+
+// truncate_rhs: collapse newlines and truncate to 128 chars.
+static std::string truncate_rhs(const std::string& raw) {
+    std::string result;
+    result.reserve(raw.size());
+    for (char c : raw) {
+        result += (c == '\n' || c == '\r') ? ' ' : c;
+    }
+    if (result.size() > 128) result.resize(128);
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// extract_dfg_edges
+// ---------------------------------------------------------------------------
+std::vector<DfgEdge> extract_dfg_edges(const TSTree* tree,
+                                        const TSQuery* dfg_query,
+                                        const std::string& source,
+                                        const std::vector<Symbol>& symbols) {
+    std::vector<DfgEdge> results;
+    if (!tree || !dfg_query) return results;
+
+    TSNode root = ts_tree_root_node(const_cast<TSTree*>(tree));
+    TSQuery* q  = const_cast<TSQuery*>(dfg_query);
+
+    uint32_t cap_count = ts_query_capture_count(q);
+    std::unordered_map<uint32_t, std::string> cap_names;
+    for (uint32_t i = 0; i < cap_count; ++i) {
+        uint32_t len = 0;
+        const char* name = ts_query_capture_name_for_id(q, i, &len);
+        if (name) cap_names[i] = std::string(name, len);
+    }
+
+    // Helper: find enclosing symbol by byte-range containment (function-local scoping)
+    auto find_enclosing_symbol = [&](uint32_t byte_offset) -> const Symbol* {
+        for (const auto& sym : symbols) {
+            if (sym.start_byte <= byte_offset && byte_offset < sym.end_byte) {
+                return &sym;
+            }
+        }
+        return nullptr;
+    };
+
+    TSQueryCursor* cursor = ts_query_cursor_new();
+    ts_query_cursor_exec(cursor, q, root);
+
+    TSQueryMatch match;
+    while (ts_query_cursor_next_match(cursor, &match)) {
+        // Collect captures into named map for this match
+        std::unordered_map<std::string, TSNode> capture_map;
+        std::string outer_cap;  // the outermost capture name (@dfg.assignment, @dfg.parameter, @dfg.return)
+
+        for (uint32_t i = 0; i < match.capture_count; ++i) {
+            uint32_t cap_idx  = match.captures[i].index;
+            TSNode   cap_node = match.captures[i].node;
+
+            auto it = cap_names.find(cap_idx);
+            if (it == cap_names.end()) continue;
+
+            const std::string& cap_name = it->second;
+            capture_map[cap_name] = cap_node;
+
+            // Track outer pattern capture
+            if (cap_name == "dfg.assignment" || cap_name == "dfg.parameter" || cap_name == "dfg.return") {
+                outer_cap = cap_name;
+            }
+        }
+
+        if (outer_cap.empty()) continue;
+
+        // Determine anchor node for enclosing symbol lookup
+        TSNode anchor_node;
+        if (outer_cap == "dfg.assignment") {
+            anchor_node = capture_map["dfg.assignment"];
+        } else if (outer_cap == "dfg.parameter") {
+            anchor_node = capture_map["dfg.parameter"];
+        } else {
+            anchor_node = capture_map["dfg.return"];
+        }
+
+        uint32_t node_byte = ts_node_start_byte(anchor_node);
+        const Symbol* enclosing = find_enclosing_symbol(node_byte);
+
+        // DFG-03: function-local only -- skip if no enclosing symbol found
+        if (!enclosing) continue;
+
+        int line = static_cast<int>(ts_node_start_point(anchor_node).row) + 1;
+
+        if (outer_cap == "dfg.assignment") {
+            // Get LHS and RHS
+            auto lhs_it = capture_map.find("dfg.lhs");
+            auto rhs_it = capture_map.find("dfg.rhs");
+            if (lhs_it == capture_map.end()) continue;
+
+            std::vector<std::string> lhs_names = expand_lhs(lhs_it->second, source);
+            std::string rhs_text;
+            if (rhs_it != capture_map.end()) {
+                rhs_text = truncate_rhs(node_text(rhs_it->second, source));
+            }
+
+            for (const auto& lhs_name : lhs_names) {
+                DfgEdge edge;
+                edge.edge_type   = "assignment";
+                edge.lhs         = lhs_name;
+                edge.rhs_snippet = rhs_text;
+                edge.line        = line;
+                edge.symbol_name = enclosing->name;
+                results.push_back(std::move(edge));
+            }
+        } else if (outer_cap == "dfg.parameter") {
+            auto param_it = capture_map.find("dfg.param");
+            if (param_it == capture_map.end()) continue;
+
+            std::string param_name = node_text(param_it->second, source);
+            if (param_name.empty()) continue;
+
+            // Use param node line (more precise than anchor)
+            int param_line = static_cast<int>(ts_node_start_point(param_it->second).row) + 1;
+
+            DfgEdge edge;
+            edge.edge_type   = "parameter";
+            edge.lhs         = param_name;
+            edge.rhs_snippet = "";  // NULL for parameter edges per schema
+            edge.line        = param_line;
+            edge.symbol_name = enclosing->name;
+            results.push_back(std::move(edge));
+        } else if (outer_cap == "dfg.return") {
+            auto rhs_it = capture_map.find("dfg.rhs");
+            std::string rhs_text;
+            if (rhs_it != capture_map.end()) {
+                rhs_text = truncate_rhs(node_text(rhs_it->second, source));
+            }
+
+            DfgEdge edge;
+            edge.edge_type   = "return_value";
+            edge.lhs         = "return";
+            edge.rhs_snippet = rhs_text;
+            edge.line        = line;
+            edge.symbol_name = enclosing->name;
+            results.push_back(std::move(edge));
+        }
+    }
+
+    ts_query_cursor_delete(cursor);
+    return results;
+}
+
 } // namespace codetldr
