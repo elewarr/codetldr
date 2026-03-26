@@ -304,6 +304,72 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
             response["error"] = error;
         }
 
+    } else if (method == "get_control_flow") {
+        try {
+            const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
+
+            if (!params.contains("name") || !params["name"].is_string()) {
+                nlohmann::json error;
+                error["code"]    = -32602;
+                error["message"] = "name required";
+                response["error"] = error;
+            } else {
+                std::string name      = params["name"].get<std::string>();
+                std::string file_path = params.value("file_path", "");
+
+                SymbolInfo sym = context_builder_->find_symbol(name, file_path);
+
+                nlohmann::json result;
+                result["found"] = sym.found;
+                result["name"]  = sym.found ? sym.name : name;
+                result["nodes"] = nlohmann::json::array();
+
+                if (sym.found) {
+                    result["nodes"] = context_builder_->get_control_flow(sym.id);
+                }
+
+                response["result"] = std::move(result);
+            }
+        } catch (const std::exception& e) {
+            nlohmann::json error;
+            error["code"]    = -32000;
+            error["message"] = e.what();
+            response["error"] = error;
+        }
+
+    } else if (method == "get_data_flow") {
+        try {
+            const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
+
+            if (!params.contains("name") || !params["name"].is_string()) {
+                nlohmann::json error;
+                error["code"]    = -32602;
+                error["message"] = "name required";
+                response["error"] = error;
+            } else {
+                std::string name      = params["name"].get<std::string>();
+                std::string file_path = params.value("file_path", "");
+
+                SymbolInfo sym = context_builder_->find_symbol(name, file_path);
+
+                nlohmann::json result;
+                result["found"] = sym.found;
+                result["name"]  = sym.found ? sym.name : name;
+                result["edges"] = nlohmann::json::array();
+
+                if (sym.found) {
+                    result["edges"] = context_builder_->get_data_flow(sym.id);
+                }
+
+                response["result"] = std::move(result);
+            }
+        } catch (const std::exception& e) {
+            nlohmann::json error;
+            error["code"]    = -32000;
+            error["message"] = e.what();
+            response["error"] = error;
+        }
+
     } else if (method == "get_project_overview") {
         try {
             nlohmann::json result;

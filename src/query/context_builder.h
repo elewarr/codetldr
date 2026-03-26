@@ -1,5 +1,6 @@
 #pragma once
 #include <SQLiteCpp/SQLiteCpp.h>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,14 @@ public:
 
     /// Return names of all callers of symbol_id.
     std::vector<std::string> get_caller_names(int64_t symbol_id);
+
+    /// Return CFG nodes for the given symbol_id, ordered by line ascending.
+    /// Returns empty JSON array if symbol has no CFG data (unsupported language).
+    nlohmann::json get_control_flow(int64_t symbol_id);
+
+    /// Return DFG edges for the given symbol_id, ordered by line ascending.
+    /// Returns empty JSON array if symbol has no DFG data (unsupported language).
+    nlohmann::json get_data_flow(int64_t symbol_id);
 
 private:
     struct SymbolRow {
