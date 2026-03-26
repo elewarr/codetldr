@@ -117,6 +117,66 @@ else
   check "Synthetic passthrough: regex pattern exits 0 without deny" 1
 fi
 
+# ---- .claude-plugin/plugin.json checks ----
+
+test -f codetldr-plugin/.claude-plugin/plugin.json
+check ".claude-plugin/plugin.json exists" $?
+
+python3 -c "import json; json.load(open('codetldr-plugin/.claude-plugin/plugin.json'))" 2>/dev/null
+check ".claude-plugin/plugin.json is valid JSON" $?
+
+grep -q '"name"' codetldr-plugin/.claude-plugin/plugin.json 2>/dev/null
+check "plugin.json contains name field" $?
+
+grep -q '"codetldr"' codetldr-plugin/.claude-plugin/plugin.json 2>/dev/null
+check "plugin.json name is codetldr" $?
+
+grep -q '"version"' codetldr-plugin/.claude-plugin/plugin.json 2>/dev/null
+check "plugin.json contains version field" $?
+
+grep -q '"1.1.0"' codetldr-plugin/.claude-plugin/plugin.json 2>/dev/null
+check "plugin.json version is 1.1.0" $?
+
+grep -q '"description"' codetldr-plugin/.claude-plugin/plugin.json 2>/dev/null
+check "plugin.json contains description field" $?
+
+# ---- .mcp.json checks ----
+
+test -f codetldr-plugin/.mcp.json
+check ".mcp.json exists at plugin root" $?
+
+python3 -c "import json; json.load(open('codetldr-plugin/.mcp.json'))" 2>/dev/null
+check ".mcp.json is valid JSON" $?
+
+grep -q '"mcpServers"' codetldr-plugin/.mcp.json 2>/dev/null
+check ".mcp.json contains mcpServers key" $?
+
+grep -q '"codetldr"' codetldr-plugin/.mcp.json 2>/dev/null
+check ".mcp.json registers codetldr server" $?
+
+grep -q '"codetldr-mcp"' codetldr-plugin/.mcp.json 2>/dev/null
+check ".mcp.json command is codetldr-mcp" $?
+
+# ---- hooks.json path update checks ----
+
+grep -q 'CLAUDE_PLUGIN_ROOT' codetldr-plugin/hooks/hooks.json 2>/dev/null
+check "hooks.json uses \${CLAUDE_PLUGIN_ROOT} paths" $?
+
+# Verify no bare relative paths remain (should NOT match "hooks/session-start.sh" without CLAUDE_PLUGIN_ROOT prefix)
+! grep -P '"hooks/[a-z]' codetldr-plugin/hooks/hooks.json 2>/dev/null
+check "hooks.json has no bare relative command paths" $?
+
+# ---- README.md checks ----
+
+test -f codetldr-plugin/README.md
+check "README.md exists at plugin root" $?
+
+grep -q 'claude plugin install' codetldr-plugin/README.md 2>/dev/null
+check "README.md contains install command" $?
+
+grep -q '\-\-plugin-dir' codetldr-plugin/README.md 2>/dev/null
+check "README.md contains --plugin-dir test command" $?
+
 # ---- Summary ----
 
 TOTAL=$((PASS_COUNT + FAIL_COUNT))
