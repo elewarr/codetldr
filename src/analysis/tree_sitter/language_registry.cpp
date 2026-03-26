@@ -24,37 +24,37 @@ bool LanguageRegistry::initialize() {
     bool ok = true;
 
     auto q = queries::python();
-    ok &= register_language("python", tree_sitter_python(), q.symbols, q.calls);
+    ok &= register_language("python", tree_sitter_python(), q.symbols, q.calls, q.cfg);
 
     q = queries::javascript();
-    ok &= register_language("javascript", tree_sitter_javascript(), q.symbols, q.calls);
+    ok &= register_language("javascript", tree_sitter_javascript(), q.symbols, q.calls, q.cfg);
 
     q = queries::typescript();
-    ok &= register_language("typescript", tree_sitter_typescript(), q.symbols, q.calls);
+    ok &= register_language("typescript", tree_sitter_typescript(), q.symbols, q.calls, q.cfg);
 
     q = queries::tsx();
-    ok &= register_language("tsx", tree_sitter_tsx(), q.symbols, q.calls);
+    ok &= register_language("tsx", tree_sitter_tsx(), q.symbols, q.calls, q.cfg);
 
     q = queries::rust();
-    ok &= register_language("rust", tree_sitter_rust(), q.symbols, q.calls);
+    ok &= register_language("rust", tree_sitter_rust(), q.symbols, q.calls, q.cfg);
 
     q = queries::c();
-    ok &= register_language("c", tree_sitter_c(), q.symbols, q.calls);
+    ok &= register_language("c", tree_sitter_c(), q.symbols, q.calls, q.cfg);
 
     q = queries::cpp();
-    ok &= register_language("cpp", tree_sitter_cpp(), q.symbols, q.calls);
+    ok &= register_language("cpp", tree_sitter_cpp(), q.symbols, q.calls, q.cfg);
 
     q = queries::java();
-    ok &= register_language("java", tree_sitter_java(), q.symbols, q.calls);
+    ok &= register_language("java", tree_sitter_java(), q.symbols, q.calls, q.cfg);
 
     q = queries::kotlin();
-    ok &= register_language("kotlin", tree_sitter_kotlin(), q.symbols, q.calls);
+    ok &= register_language("kotlin", tree_sitter_kotlin(), q.symbols, q.calls, q.cfg);
 
     q = queries::swift();
-    ok &= register_language("swift", tree_sitter_swift(), q.symbols, q.calls);
+    ok &= register_language("swift", tree_sitter_swift(), q.symbols, q.calls, q.cfg);
 
     q = queries::objc();
-    ok &= register_language("objc", tree_sitter_objc(), q.symbols, q.calls);
+    ok &= register_language("objc", tree_sitter_objc(), q.symbols, q.calls, q.cfg);
 
     // Extension -> language mappings
     ext_to_lang_[".py"]  = "python";
@@ -94,7 +94,8 @@ bool LanguageRegistry::initialize() {
 bool LanguageRegistry::register_language(const std::string& name,
                                           const TSLanguage* lang,
                                           const char* symbol_query_str,
-                                          const char* call_query_str) {
+                                          const char* call_query_str,
+                                          const char* cfg_query_str) {
     if (!lang) {
         SPDLOG_ERROR("Language '{}': null TSLanguage pointer", name);
         return false;
@@ -126,11 +127,28 @@ bool LanguageRegistry::register_language(const std::string& name,
         return false;
     }
 
+    // Compile cfg query (optional -- nullptr means no CFG for this language)
+    TSQuery* cfg_q = nullptr;
+    if (cfg_query_str && cfg_query_str[0] != '\0') {
+        cfg_q = ts_query_new(lang, cfg_query_str,
+                             static_cast<uint32_t>(strlen(cfg_query_str)),
+                             &error_offset, &error_type);
+        if (!cfg_q || error_type != TSQueryErrorNone) {
+            SPDLOG_ERROR("Language '{}': cfg query failed at offset {}, error type {}",
+                         name, error_offset, static_cast<int>(error_type));
+            ts_query_delete(sym_q);
+            ts_query_delete(call_q);
+            if (cfg_q) ts_query_delete(cfg_q);
+            return false;
+        }
+    }
+
     LanguageEntry entry;
     entry.name = name;
     entry.language = lang;
     entry.symbol_query = TsQueryPtr(sym_q);
     entry.call_query   = TsQueryPtr(call_q);
+    entry.cfg_query    = TsQueryPtr(cfg_q);
 
     entries_[name] = std::move(entry);
     return true;

@@ -43,10 +43,10 @@ int main() {
     // Open database - runs migrations
     auto db = codetldr::Database::open(db_path);
 
-    // Test: schema version == 3
-    assert_true(db.schema_version() == 4,
-        "schema_version should be 4 after migrations, got " + std::to_string(db.schema_version()));
-    std::cout << "PASS: schema_version == 4\n";
+    // Test: schema version == 5 (migration v5 adds cfg_nodes table)
+    assert_true(db.schema_version() == 5,
+        "schema_version should be 5 after migrations, got " + std::to_string(db.schema_version()));
+    std::cout << "PASS: schema_version == 5\n";
 
     // Test: symbols table columns
     {
@@ -75,6 +75,20 @@ int main() {
         assert_true(has_column(cols, "file_id"), "calls.file_id missing");
         assert_true(has_column(cols, "line"), "calls.line missing");
         std::cout << "PASS: calls table has correct columns\n";
+    }
+
+    // Test: cfg_nodes table columns
+    {
+        auto cols = table_columns(db.raw(), "cfg_nodes");
+        assert_true(!cols.empty(), "cfg_nodes table should exist");
+        assert_true(has_column(cols, "id"), "cfg_nodes.id missing");
+        assert_true(has_column(cols, "file_id"), "cfg_nodes.file_id missing");
+        assert_true(has_column(cols, "symbol_id"), "cfg_nodes.symbol_id missing");
+        assert_true(has_column(cols, "node_type"), "cfg_nodes.node_type missing");
+        assert_true(has_column(cols, "condition"), "cfg_nodes.condition missing");
+        assert_true(has_column(cols, "line"), "cfg_nodes.line missing");
+        assert_true(has_column(cols, "depth"), "cfg_nodes.depth missing");
+        std::cout << "PASS: cfg_nodes table has correct columns\n";
     }
 
     // Test: INSERT into files, then symbols, then calls
