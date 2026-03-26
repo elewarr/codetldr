@@ -6,11 +6,13 @@
 //
 // Tests:
 //   1. initialize returns correct protocolVersion, serverInfo, capabilities
-//   2. tools/list returns 6 tools with valid inputSchema
+//   2. tools/list returns 8 tools with valid inputSchema
 //   3. tools/call with no daemon running returns isError:true
 //   4. Unknown method returns JSON-RPC -32601 error
 //   5. ping returns empty result
 //   6. Notification produces no response (only ping response returned)
+//   7. get_control_flow tool dispatches (isError:true when no daemon)
+//   8. get_data_flow tool dispatches (isError:true when no daemon)
 
 #include <nlohmann/json.hpp>
 
@@ -178,10 +180,10 @@ static void test_1_initialize(const fs::path& binary, const fs::path& project_ro
 }
 
 // ---------------------------------------------------------------------------
-// Test 2: tools/list returns 6 tools with valid inputSchema
+// Test 2: tools/list returns 8 tools with valid inputSchema
 // ---------------------------------------------------------------------------
 static void test_2_tools_list(const fs::path& binary, const fs::path& project_root) {
-    std::cout << "Test 2: tools/list returns 6 tools with valid inputSchema..." << std::flush;
+    std::cout << "Test 2: tools/list returns 8 tools with valid inputSchema..." << std::flush;
 
     auto proc = spawn_mcp(binary, project_root);
 
@@ -199,12 +201,13 @@ static void test_2_tools_list(const fs::path& binary, const fs::path& project_ro
 
     auto& tools = resp["result"]["tools"];
     assert(tools.is_array() && "Test 2: tools should be array");
-    assert(tools.size() == 6 && "Test 2: should have exactly 6 tools");
+    assert(tools.size() == 8 && "Test 2: should have exactly 8 tools");
 
     // Verify all expected tool names are present
     std::vector<std::string> expected_names = {
         "search_symbols", "search_text", "get_file_summary",
-        "get_function_detail", "get_call_graph", "get_project_overview"
+        "get_function_detail", "get_call_graph", "get_project_overview",
+        "get_control_flow", "get_data_flow"
     };
     for (const auto& name : expected_names) {
         bool found = false;
@@ -387,6 +390,82 @@ static void test_6_notification_no_response(const fs::path& binary,
 }
 
 // ---------------------------------------------------------------------------
+// Test 7: get_control_flow tool dispatches (isError:true when no daemon)
+// ---------------------------------------------------------------------------
+static void test_7_get_control_flow(const fs::path& binary, const fs::path& project_root) {
+    std::cout << "Test 7: get_control_flow dispatches correctly (isError:true when no daemon)..." << std::flush;
+
+    fs::path temp_root = fs::temp_directory_path() / "codetldr_mcp_test_t7";
+    fs::create_directories(temp_root / ".codetldr");
+
+    auto proc = spawn_mcp(binary, temp_root);
+
+    // Send initialize
+    send_request(proc.write_pipe, {{"jsonrpc","2.0"},{"id",1},{"method","initialize"}});
+    read_response(proc.read_pipe);  // consume
+
+    // Send tools/call for get_control_flow — daemon is not running
+    send_request(proc.write_pipe, {
+        {"jsonrpc", "2.0"},
+        {"id",      7},
+        {"method",  "tools/call"},
+        {"params",  {
+            {"name",      "get_control_flow"},
+            {"arguments", {{"name", "main"}}}
+        }}
+    });
+
+    auto resp = read_response(proc.read_pipe);
+
+    assert(resp.value("id", -1) == 7 && "Test 7: id should be 7");
+    assert(resp.contains("result") && "Test 7: response should have result");
+    assert(resp["result"].value("isError", false) == true &&
+           "Test 7: isError should be true when daemon not running");
+
+    close_mcp(proc);
+    fs::remove_all(temp_root);
+    std::cout << " PASS\n";
+}
+
+// ---------------------------------------------------------------------------
+// Test 8: get_data_flow tool dispatches (isError:true when no daemon)
+// ---------------------------------------------------------------------------
+static void test_8_get_data_flow(const fs::path& binary, const fs::path& project_root) {
+    std::cout << "Test 8: get_data_flow dispatches correctly (isError:true when no daemon)..." << std::flush;
+
+    fs::path temp_root = fs::temp_directory_path() / "codetldr_mcp_test_t8";
+    fs::create_directories(temp_root / ".codetldr");
+
+    auto proc = spawn_mcp(binary, temp_root);
+
+    // Send initialize
+    send_request(proc.write_pipe, {{"jsonrpc","2.0"},{"id",1},{"method","initialize"}});
+    read_response(proc.read_pipe);  // consume
+
+    // Send tools/call for get_data_flow — daemon is not running
+    send_request(proc.write_pipe, {
+        {"jsonrpc", "2.0"},
+        {"id",      8},
+        {"method",  "tools/call"},
+        {"params",  {
+            {"name",      "get_data_flow"},
+            {"arguments", {{"name", "main"}}}
+        }}
+    });
+
+    auto resp = read_response(proc.read_pipe);
+
+    assert(resp.value("id", -1) == 8 && "Test 8: id should be 8");
+    assert(resp.contains("result") && "Test 8: response should have result");
+    assert(resp["result"].value("isError", false) == true &&
+           "Test 8: isError should be true when daemon not running");
+
+    close_mcp(proc);
+    fs::remove_all(temp_root);
+    std::cout << " PASS\n";
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 int main(int argc, char* argv[]) {
@@ -416,9 +495,11 @@ int main(int argc, char* argv[]) {
         test_4_unknown_method(binary, project_root);
         test_5_ping(binary, project_root);
         test_6_notification_no_response(binary, project_root);
+        test_7_get_control_flow(binary, project_root);
+        test_8_get_data_flow(binary, project_root);
 
         fs::remove_all(project_root);
-        std::cout << "\nAll 6 tests passed.\n";
+        std::cout << "\nAll 8 tests passed.\n";
         return 0;
     } catch (const std::exception& ex) {
         std::cerr << "\nFATAL: " << ex.what() << "\n";
