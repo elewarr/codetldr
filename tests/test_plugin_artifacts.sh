@@ -3,6 +3,14 @@
 # Checks SKILL.md, hooks.json, and hook scripts for correctness.
 # Usage: bash tests/test_plugin_artifacts.sh
 # Exit: 0 if all checks pass, 1 if any fail.
+#
+# Known limitation: --plugin-dir runtime testing
+# These tests validate plugin artifacts (file existence, JSON structure, content
+# patterns) but do NOT test hook dispatch through `claude --plugin-dir`. That
+# pathway depends on Claude Code's internal hook runner and cannot be mocked.
+# To manually test full plugin loading:
+#   claude --plugin-dir ./codetldr-plugin --mcp-config ./codetldr-plugin/.mcp.json
+# The agentic E2E test (test_e2e_agentic.sh) covers MCP tool usage separately.
 
 # Change to project root (relative to this script's location)
 cd "$(dirname "$0")/.." || exit 1
