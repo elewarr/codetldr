@@ -23,6 +23,15 @@ struct CallEdge {
     int line;                  // 1-indexed line of call site
 };
 
+struct CfgNode {
+    std::string node_type;   // "if_branch", "else_branch", "loop",
+                             // "early_return", "switch_case", "try_catch"
+    std::string condition;   // condition text, max 256 chars, empty if n/a
+    int line;                // 1-indexed
+    int depth;               // 0 = function body, 1 = first nesting
+    std::string symbol_name; // enclosing function name (for persistence lookup)
+};
+
 struct ExtractionResult {
     std::vector<Symbol> symbols;
     std::vector<CallEdge> calls;
@@ -40,6 +49,14 @@ std::vector<Symbol> extract_symbols(
 std::vector<CallEdge> extract_calls(
     const TSTree* tree,
     const TSQuery* call_query,
+    const std::string& source,
+    const std::vector<Symbol>& symbols);
+
+// Extract CFG nodes (branches, loops, returns) from a parsed tree.
+// symbols is the previously extracted symbol list (used for enclosing function lookup).
+std::vector<CfgNode> extract_cfg_nodes(
+    const TSTree* tree,
+    const TSQuery* cfg_query,
     const std::string& source,
     const std::vector<Symbol>& symbols);
 
