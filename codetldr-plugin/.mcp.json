@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "codetldr": {
+      "command": "codetldr-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}

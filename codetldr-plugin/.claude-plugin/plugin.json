@@ -1,0 +1,5 @@
+{
+  "name": "codetldr",
+  "version": "1.1.0",
+  "description": "Token-efficient code intelligence for LLM agents. Structured symbol search, call graphs, and file summaries at 90%+ fewer tokens than reading raw files."
+}
