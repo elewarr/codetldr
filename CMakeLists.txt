@@ -104,6 +104,10 @@ add_executable(test_cfg_extractor tests/test_cfg_extractor.cpp)
 target_link_libraries(test_cfg_extractor PRIVATE codetldr_analysis)
 add_test(NAME cfg_extractor COMMAND test_cfg_extractor)
 
+add_executable(test_dfg_extractor tests/test_dfg_extractor.cpp)
+target_link_libraries(test_dfg_extractor PRIVATE codetldr_analysis)
+add_test(NAME dfg_extractor COMMAND test_dfg_extractor)
+
 add_executable(test_daemon_ipc tests/test_daemon_ipc.cpp)
 target_link_libraries(test_daemon_ipc PRIVATE codetldr_daemon)
 add_test(NAME daemon_ipc COMMAND test_daemon_ipc)
