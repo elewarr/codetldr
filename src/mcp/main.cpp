@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 
 // ---------------------------------------------------------------------------
 // Helper: make_tools_list_response
-// Build all 6 MCP tool definitions with inputSchema and wrap in JSON-RPC envelope.
+// Build all 8 MCP tool definitions with inputSchema and wrap in JSON-RPC envelope.
 // ---------------------------------------------------------------------------
 static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
     nlohmann::json tools = nlohmann::json::array();
@@ -103,6 +103,32 @@ static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
         }}
     });
 
+    tools.push_back({
+        {"name", "get_control_flow"},
+        {"description", "Get control flow graph (CFG) for a function: branches, loops, returns, and switch cases. Returns nodes with type, condition, line, and nesting depth. Empty for unsupported languages."},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"name",      {{"type","string"},{"description","Exact function or method name"}}},
+                {"file_path", {{"type","string"},{"description","Scope search to this file (optional)"}}}
+            }},
+            {"required", nlohmann::json::array({"name"})}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "get_data_flow"},
+        {"description", "Get data flow graph (DFG) for a function: assignments, parameter bindings, and return values. Returns edges with type, lhs variable, rhs snippet, and line. Empty for unsupported languages."},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"name",      {{"type","string"},{"description","Exact function or method name"}}},
+                {"file_path", {{"type","string"},{"description","Scope search to this file (optional)"}}}
+            }},
+            {"required", nlohmann::json::array({"name"})}
+        }}
+    });
+
     return nlohmann::json{
         {"jsonrpc", "2.0"},
         {"id",      id},
@@ -142,6 +168,10 @@ static nlohmann::json dispatch_tool_call(const std::string& tool_name,
             daemon_resp = client.call("get_call_graph", arguments);
         } else if (tool_name == "get_project_overview") {
             daemon_resp = client.call("get_project_overview", nlohmann::json::object());
+        } else if (tool_name == "get_control_flow") {
+            daemon_resp = client.call("get_control_flow", arguments);
+        } else if (tool_name == "get_data_flow") {
+            daemon_resp = client.call("get_data_flow", arguments);
         } else {
             return {
                 {"content", {{{"type","text"},{"text","Unknown tool: " + tool_name}}}},
