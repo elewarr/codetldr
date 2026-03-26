@@ -18,12 +18,12 @@ AnalysisResult analyze_file(SQLite::Database& db,
                               const std::filesystem::path& file_path) {
     // a. Read file content from disk
     if (!std::filesystem::exists(file_path)) {
-        return {0, 0, false, "file not found: " + file_path.string()};
+        return {0, 0, 0, false, "file not found: " + file_path.string()};
     }
 
     std::ifstream f(file_path);
     if (!f.is_open()) {
-        return {0, 0, false, "cannot open file: " + file_path.string()};
+        return {0, 0, 0, false, "cannot open file: " + file_path.string()};
     }
     std::ostringstream ss;
     ss << f.rdbuf();
@@ -33,7 +33,7 @@ AnalysisResult analyze_file(SQLite::Database& db,
     std::string ext = file_path.extension().string();
     const auto* entry = registry.for_extension(ext);
     if (!entry) {
-        return {0, 0, false, "unsupported extension: " + ext};
+        return {0, 0, 0, false, "unsupported extension: " + ext};
     }
 
     // c. Upsert the file into the `files` table
@@ -57,7 +57,7 @@ AnalysisResult analyze_file(SQLite::Database& db,
         SQLite::Statement get_id(db, "SELECT id FROM files WHERE path = ?");
         get_id.bind(1, file_path.string());
         if (!get_id.executeStep()) {
-            return {0, 0, false, "failed to get file_id for: " + file_path.string()};
+            return {0, 0, 0, false, "failed to get file_id for: " + file_path.string()};
         }
         file_id = get_id.getColumn(0).getInt64();
     }
@@ -65,12 +65,18 @@ AnalysisResult analyze_file(SQLite::Database& db,
     // d. Parse source with Tree-sitter
     auto tree = parse_source(entry->language, content);
     if (!tree) {
-        return {0, 0, false, "parse failed for " + file_path.string()};
+        return {0, 0, 0, false, "parse failed for " + file_path.string()};
     }
 
-    // e. Extract symbols and calls
+    // e. Extract symbols, calls, and CFG nodes
     auto symbols = extract_symbols(tree.get(), entry->symbol_query.get(), content);
     auto calls   = extract_calls(tree.get(), entry->call_query.get(), content, symbols);
+
+    // f2. Extract CFG nodes (if language supports it)
+    std::vector<CfgNode> cfg_nodes_vec;
+    if (entry->cfg_query) {
+        cfg_nodes_vec = extract_cfg_nodes(tree.get(), entry->cfg_query.get(), content, symbols);
+    }
 
     // f. Persist to SQLite inside a transaction (delete + re-insert = upsert semantics)
     try {
@@ -168,12 +174,44 @@ AnalysisResult analyze_file(SQLite::Database& db,
             ins_call.exec();
         }
 
+        // Delete stale CFG nodes for this file
+        {
+            SQLite::Statement del_cfg(db, "DELETE FROM cfg_nodes WHERE file_id = ?");
+            del_cfg.bind(1, file_id);
+            del_cfg.exec();
+        }
+
+        // Insert CFG nodes
+        if (!cfg_nodes_vec.empty()) {
+            SQLite::Statement ins_cfg(db, R"sql(
+                INSERT INTO cfg_nodes(file_id, symbol_id, node_type, condition, line, depth)
+                VALUES (?, ?, ?, ?, ?, ?)
+            )sql");
+
+            for (const auto& node : cfg_nodes_vec) {
+                ins_cfg.reset();
+                ins_cfg.bind(1, file_id);
+                auto sym_it = sym_name_to_id.find(node.symbol_name);
+                if (sym_it != sym_name_to_id.end())
+                    ins_cfg.bind(2, sym_it->second);
+                else
+                    ins_cfg.bind(2);  // NULL (top-level control flow)
+                ins_cfg.bind(3, node.node_type);
+                if (!node.condition.empty()) ins_cfg.bind(4, node.condition);
+                else                         ins_cfg.bind(4);  // NULL
+                ins_cfg.bind(5, node.line);
+                ins_cfg.bind(6, node.depth);
+                ins_cfg.exec();
+            }
+        }
+
         txn.commit();
     } catch (const SQLite::Exception& e) {
-        return {0, 0, false, std::string("SQLite error: ") + e.what()};
+        return {0, 0, 0, false, std::string("SQLite error: ") + e.what()};
     }
 
-    return {static_cast<int>(symbols.size()), static_cast<int>(calls.size()), true, {}};
+    return {static_cast<int>(symbols.size()), static_cast<int>(calls.size()),
+            static_cast<int>(cfg_nodes_vec.size()), true, {}};
 }
 
 } // namespace codetldr
