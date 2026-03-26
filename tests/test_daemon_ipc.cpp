@@ -6,6 +6,8 @@
 //   4. Unknown method returns JSON-RPC error {code: -32601}
 //   5. Stop request returns {ok: true}
 //   6. StatusWriter write/read roundtrip
+//   7. bind_or_die rejects paths exceeding sun_path limit
+//   8. DaemonClient::connect rejects paths exceeding sun_path limit
 
 #include "daemon/ipc_server.h"
 #include "daemon/daemon_client.h"
@@ -277,6 +279,47 @@ static void test_6_status_writer() {
     std::cout << " PASS\n";
 }
 
+// ============================================================
+// Test 7: bind_or_die rejects paths exceeding sun_path limit
+// ============================================================
+static void test_7_server_overlong_path() {
+    std::cout << "Test 7: bind_or_die rejects overlong socket path..." << std::flush;
+
+    codetldr::IpcServer server;
+    // Generate a path longer than sizeof(sockaddr_un::sun_path) — use 200 chars
+    std::string long_path(200, 'x');
+    fs::path overlong_sock = fs::temp_directory_path() / long_path;
+    bool caught = false;
+    try {
+        server.bind_or_die(overlong_sock);
+    } catch (const std::runtime_error& e) {
+        caught = true;
+        assert(std::string(e.what()).find("Socket path too long") != std::string::npos);
+    }
+    assert(caught && "Expected runtime_error for overlong socket path");
+    std::cout << " PASS\n";
+}
+
+// ============================================================
+// Test 8: DaemonClient::connect rejects overlong socket path
+// ============================================================
+static void test_8_client_overlong_path() {
+    std::cout << "Test 8: DaemonClient::connect rejects overlong socket path..." << std::flush;
+
+    codetldr::DaemonClient client;
+    std::string long_path(200, 'x');
+    fs::path overlong_sock = fs::temp_directory_path() / long_path;
+    bool caught = false;
+    try {
+        client.connect(overlong_sock);
+    } catch (const std::runtime_error& e) {
+        caught = true;
+        assert(std::string(e.what()).find("Socket path too long") != std::string::npos);
+    }
+    assert(caught && "Expected runtime_error for overlong socket path");
+    std::cout << " PASS\n";
+}
+
 int main() {
     std::cout << "=== Daemon IPC Tests ===\n";
 
@@ -287,8 +330,10 @@ int main() {
         test_4_unknown_method();
         test_5_stop_request();
         test_6_status_writer();
+        test_7_server_overlong_path();
+        test_8_client_overlong_path();
 
-        std::cout << "\nAll 6 tests passed.\n";
+        std::cout << "\nAll 8 tests passed.\n";
         return 0;
     } catch (const std::exception& ex) {
         std::cerr << "\nFATAL: " << ex.what() << "\n";
