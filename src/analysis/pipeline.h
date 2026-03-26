@@ -13,6 +13,7 @@ struct AnalysisResult {
     int symbols_count;
     int calls_count;
     int cfg_count;      // number of CFG nodes extracted
+    int dfg_count;      // number of DFG edges extracted
     bool success;
     std::string error;  // empty if success
 };
