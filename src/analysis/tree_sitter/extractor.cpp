@@ -423,4 +423,156 @@ std::vector<CallEdge> extract_calls(const TSTree* tree,
     return results;
 }
 
+// ---------------------------------------------------------------------------
+// CFG helpers
+// ---------------------------------------------------------------------------
+
+// Maps Tree-sitter node type + capture name to one of 6 CfgNode types.
+static std::string classify_cfg_node(const char* ts_type, const std::string& cap_name) {
+    if (cap_name == "cfg.return") return "early_return";
+    if (cap_name == "cfg.loop")   return "loop";
+    // cfg.branch -- distinguish by node type
+    if (std::strcmp(ts_type, "else_clause") == 0) return "else_branch";
+    if (std::strcmp(ts_type, "try_statement") == 0 ||
+        std::strcmp(ts_type, "catch_clause") == 0 ||
+        std::strcmp(ts_type, "except_clause") == 0) return "try_catch";
+    if (std::strcmp(ts_type, "case_statement") == 0 ||
+        std::strcmp(ts_type, "switch_case") == 0) return "switch_case";
+    if (std::strcmp(ts_type, "elif_clause") == 0) return "if_branch";
+    return "if_branch";  // default for if_statement
+}
+
+// Returns true if a Tree-sitter node type is a control flow construct (used for depth counting).
+static bool is_cfg_producing_type(const char* t) {
+    return std::strcmp(t, "if_statement") == 0 ||
+           std::strcmp(t, "else_clause") == 0 ||
+           std::strcmp(t, "elif_clause") == 0 ||
+           std::strcmp(t, "while_statement") == 0 ||
+           std::strcmp(t, "for_statement") == 0 ||
+           std::strcmp(t, "for_range_loop") == 0 ||
+           std::strcmp(t, "for_in_statement") == 0 ||
+           std::strcmp(t, "do_statement") == 0 ||
+           std::strcmp(t, "try_statement") == 0 ||
+           std::strcmp(t, "catch_clause") == 0 ||
+           std::strcmp(t, "except_clause") == 0 ||
+           std::strcmp(t, "case_statement") == 0 ||
+           std::strcmp(t, "switch_case") == 0;
+}
+
+// Counts CFG-producing ancestors between matched node and function boundary.
+static int compute_depth(TSNode node, uint32_t func_start_byte) {
+    int depth = 0;
+    TSNode current = ts_node_parent(node);
+    while (!ts_node_is_null(current)) {
+        if (ts_node_start_byte(current) < func_start_byte) break;
+        const char* t = ts_node_type(current);
+        if (is_cfg_producing_type(t)) depth++;
+        current = ts_node_parent(current);
+    }
+    // Special case: else_clause is a child of if_statement.
+    // Its depth should equal the if_statement's depth, not +1.
+    // Since the parent walk counts if_statement as an ancestor of else_clause,
+    // subtract 1 for else_clause nodes.
+    const char* node_type_str = ts_node_type(node);
+    if (std::strcmp(node_type_str, "else_clause") == 0) {
+        if (depth > 0) depth--;
+    }
+    return depth;
+}
+
+// Extracts condition expression from a CFG node.
+static std::string get_condition_text(TSNode node, const std::string& source) {
+    // Try "condition" field first (if/while in C, C++, Python, JS)
+    TSNode cond = ts_node_child_by_field_name(node, "condition", 9);
+    if (!ts_node_is_null(cond)) {
+        std::string text = node_text(cond, source);
+        // Strip outer parentheses if present (C/C++ parenthesized_expression)
+        if (text.size() >= 2 && text.front() == '(' && text.back() == ')') {
+            text = text.substr(1, text.size() - 2);
+        }
+        if (text.size() > 256) text.resize(256);
+        return text;
+    }
+    // Try "value" field (case_statement/switch_case)
+    TSNode val = ts_node_child_by_field_name(node, "value", 5);
+    if (!ts_node_is_null(val)) {
+        std::string text = node_text(val, source);
+        if (text.size() > 256) text.resize(256);
+        return text;
+    }
+    return {};
+}
+
+// ---------------------------------------------------------------------------
+// extract_cfg_nodes
+// ---------------------------------------------------------------------------
+std::vector<CfgNode> extract_cfg_nodes(const TSTree* tree,
+                                        const TSQuery* cfg_query,
+                                        const std::string& source,
+                                        const std::vector<Symbol>& symbols) {
+    std::vector<CfgNode> results;
+    if (!tree || !cfg_query) return results;
+
+    TSNode root = ts_tree_root_node(const_cast<TSTree*>(tree));
+    TSQuery* q  = const_cast<TSQuery*>(cfg_query);
+
+    uint32_t cap_count = ts_query_capture_count(q);
+    std::unordered_map<uint32_t, std::string> cap_names;
+    for (uint32_t i = 0; i < cap_count; ++i) {
+        uint32_t len = 0;
+        const char* name = ts_query_capture_name_for_id(q, i, &len);
+        if (name) cap_names[i] = std::string(name, len);
+    }
+
+    // Helper to find enclosing symbol by byte-range containment
+    auto find_enclosing_symbol = [&](uint32_t byte_offset) -> const Symbol* {
+        for (const auto& sym : symbols) {
+            if (sym.start_byte <= byte_offset && byte_offset < sym.end_byte) {
+                return &sym;
+            }
+        }
+        return nullptr;
+    };
+
+    TSQueryCursor* cursor = ts_query_cursor_new();
+    ts_query_cursor_exec(cursor, q, root);
+
+    TSQueryMatch match;
+    while (ts_query_cursor_next_match(cursor, &match)) {
+        for (uint32_t i = 0; i < match.capture_count; ++i) {
+            uint32_t cap_idx  = match.captures[i].index;
+            TSNode   cap_node = match.captures[i].node;
+
+            auto it = cap_names.find(cap_idx);
+            if (it == cap_names.end()) continue;
+
+            const std::string& cap_name = it->second;
+            // Only process cfg.branch, cfg.loop, cfg.return captures
+            if (cap_name != "cfg.branch" && cap_name != "cfg.loop" && cap_name != "cfg.return") continue;
+
+            const char* ts_type = ts_node_type(cap_node);
+            std::string node_type_str = classify_cfg_node(ts_type, cap_name);
+
+            uint32_t node_byte = ts_node_start_byte(cap_node);
+            const Symbol* enclosing = find_enclosing_symbol(node_byte);
+
+            uint32_t func_start_byte = enclosing ? enclosing->start_byte : 0;
+            int depth = compute_depth(cap_node, func_start_byte);
+
+            std::string condition = get_condition_text(cap_node, source);
+
+            CfgNode cfg;
+            cfg.node_type   = std::move(node_type_str);
+            cfg.condition   = std::move(condition);
+            cfg.line        = static_cast<int>(ts_node_start_point(cap_node).row) + 1;
+            cfg.depth       = depth;
+            cfg.symbol_name = enclosing ? enclosing->name : std::string{};
+            results.push_back(std::move(cfg));
+        }
+    }
+
+    ts_query_cursor_delete(cursor);
+    return results;
+}
+
 } // namespace codetldr

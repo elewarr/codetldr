@@ -100,6 +100,10 @@ add_executable(test_call_extractor tests/test_call_extractor.cpp)
 target_link_libraries(test_call_extractor PRIVATE codetldr_analysis)
 add_test(NAME call_extractor COMMAND test_call_extractor)
 
+add_executable(test_cfg_extractor tests/test_cfg_extractor.cpp)
+target_link_libraries(test_cfg_extractor PRIVATE codetldr_analysis)
+add_test(NAME cfg_extractor COMMAND test_cfg_extractor)
+
 add_executable(test_daemon_ipc tests/test_daemon_ipc.cpp)
 target_link_libraries(test_daemon_ipc PRIVATE codetldr_daemon)
 add_test(NAME daemon_ipc COMMAND test_daemon_ipc)
