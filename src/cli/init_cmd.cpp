@@ -113,17 +113,108 @@ static pid_t start_daemon_for_project(const fs::path& project_root) {
     return child_pid;
 }
 
-// Generate the language support matrix row for a given language name
-static std::string lang_capabilities_row(const std::string& lang) {
-    // All supported languages have L1 AST via tree-sitter
-    // L2 call graph is approximate (tree-sitter based)
-    // L3-L5 not yet implemented
-    std::string l1 = "yes";
-    std::string l2 = "approx";
-    std::string l3 = "no";
-    std::string l4 = "no";
-    std::string l5 = "no";
-    return "| " + lang + " | " + l1 + " | " + l2 + " | " + l3 + " | " + l4 + " | " + l5 + " |";
+// Build the codetldr section for .codetldr/CLAUDE.md
+static std::string build_codetldr_section(const std::map<std::string, int>& lang_counts) {
+    std::ostringstream ss;
+    ss << "<!-- codetldr:start -->\n";
+    ss << "## CodeTLDR\n\n";
+    if (!lang_counts.empty()) {
+        ss << "Detected languages: ";
+        bool first = true;
+        for (const auto& [lang, count] : lang_counts) {
+            if (!first) ss << ", ";
+            std::string display = lang;
+            if (!display.empty()) display[0] = static_cast<char>(std::toupper(display[0]));
+            ss << display;
+            first = false;
+        }
+        ss << "\n\n";
+    }
+    ss << "### MCP Tools\n";
+    ss << "- **search_symbols** — find functions/classes/methods by name\n";
+    ss << "- **search_text** — keyword search over all indexed source\n";
+    ss << "- **get_file_summary** — structured file overview at <10% token cost\n";
+    ss << "- **get_function_detail** — signature, docs, callers, callees for a function\n";
+    ss << "- **get_call_graph** — forward/backward call relationships from AST\n";
+    ss << "- **get_project_overview** — language breakdown and indexing status; use first\n\n";
+    ss << "Start daemon: `codetldr start`\n";
+    ss << "<!-- codetldr:end -->\n";
+    return ss.str();
+}
+
+// Write (or idempotently update) .codetldr/CLAUDE.md
+static bool write_claude_md(const fs::path& project_root, const std::map<std::string, int>& lang_counts) {
+    const std::string START = "<!-- codetldr:start -->";
+    const std::string END   = "<!-- codetldr:end -->";
+    fs::path path = project_root / ".codetldr" / "CLAUDE.md";
+
+    std::string existing;
+    bool existed = fs::exists(path);
+    if (existed) {
+        std::ifstream in(path);
+        existing.assign(std::istreambuf_iterator<char>(in), {});
+    }
+
+    std::string section = build_codetldr_section(lang_counts);
+    std::string output;
+
+    auto s = existing.find(START);
+    auto e = existing.find(END);
+    if (s != std::string::npos && e != std::string::npos && s < e) {
+        output = existing.substr(0, s) + section + existing.substr(e + END.size());
+    } else {
+        output = section;
+    }
+
+    std::ofstream out(path);
+    if (!out) return false;
+    out << output;
+
+    if (existed) {
+        std::cout << "Updated .codetldr/CLAUDE.md\n";
+    } else {
+        std::cout << "Created .codetldr/CLAUDE.md\n";
+    }
+    return true;
+}
+
+// Write (or merge into existing) .mcp.json at project root
+static bool write_mcp_json(const fs::path& project_root) {
+    fs::path path = project_root / ".mcp.json";
+    bool existed = fs::exists(path);
+
+    nlohmann::json config;
+    if (existed) {
+        std::ifstream in(path);
+        try {
+            in >> config;
+        } catch (const std::exception& ex) {
+            std::cerr << "Warning: .mcp.json parse failed (" << ex.what()
+                      << ") — overwriting with fresh config\n";
+            config = nlohmann::json::object();
+        }
+    }
+
+    if (!config.contains("mcpServers")) {
+        config["mcpServers"] = nlohmann::json::object();
+    }
+
+    config["mcpServers"]["codetldr"] = {
+        {"type",    "stdio"},
+        {"command", "codetldr-mcp"},
+        {"args",    nlohmann::json::array({"--project-root", project_root.string()})}
+    };
+
+    std::ofstream out(path);
+    if (!out) return false;
+    out << config.dump(2) << "\n";
+
+    if (existed) {
+        std::cout << "Updated .mcp.json\n";
+    } else {
+        std::cout << "Created .mcp.json\n";
+    }
+    return true;
 }
 
 void register_init_cmd(CLI::App& app, std::string& project_root_str) {
@@ -272,67 +363,54 @@ void register_init_cmd(CLI::App& app, std::string& project_root_str) {
         }
 
         // -------------------------------------------------------
-        // Step 5: Write .codetldr/CAPABILITIES.md
+        // Step 5: Write .codetldr/CLAUDE.md
         // -------------------------------------------------------
-        fs::path caps_path = project_root / ".codetldr" / "CAPABILITIES.md";
-        std::ofstream caps_out(caps_path);
-        if (caps_out) {
-            std::string timestamp = iso8601_now();
-
-            caps_out << "# CodeTLDR Capabilities\n\n";
-            caps_out << "## Language Support Matrix\n\n";
-            caps_out << "| Language | L1 AST | L2 Call Graph | L3 CFG | L4 DFG | L5 PDG |\n";
-            caps_out << "|----------|--------|---------------|--------|--------|--------|\n";
-
-            // List all registered languages
-            std::vector<std::string> all_langs = registry.language_names();
-            for (const auto& lang : all_langs) {
-                caps_out << lang_capabilities_row(lang) << "\n";
-            }
-
-            caps_out << "\n## Available Tools\n\n";
-            caps_out << "- search_symbols: Search for functions, classes, methods by name\n";
-            caps_out << "- search_text: Full-text search over all indexed content\n";
-            caps_out << "- get_file_summary: Token-efficient file overview\n";
-            caps_out << "- get_function_detail: Function signature, docs, callers, callees\n";
-            caps_out << "- get_call_graph: Forward/backward call relationships\n";
-            caps_out << "- get_project_overview: Language breakdown and indexing status\n";
-
-            caps_out << "\n## MCP Configuration\n\n";
-            caps_out << "Add to your Claude Code settings:\n\n";
-            caps_out << "```json\n";
-            caps_out << "{\n";
-            caps_out << "  \"mcpServers\": {\n";
-            caps_out << "    \"codetldr\": {\n";
-            caps_out << "      \"command\": \"codetldr-mcp\",\n";
-            caps_out << "      \"args\": [\"--project-root\", \"" << project_root.string() << "\"]\n";
-            caps_out << "    }\n";
-            caps_out << "  }\n";
-            caps_out << "}\n";
-            caps_out << "```\n\n";
-            caps_out << "Generated by codetldr init -- " << timestamp << "\n";
-            caps_out.close();
-        } else {
-            std::cerr << "Warning: failed to write .codetldr/CAPABILITIES.md\n";
+        if (!write_claude_md(project_root, lang_counts)) {
+            std::cerr << "Warning: failed to write .codetldr/CLAUDE.md\n";
         }
 
         // -------------------------------------------------------
-        // Step 6: Auto-start daemon
+        // Step 6: Write .mcp.json
+        // -------------------------------------------------------
+        if (!write_mcp_json(project_root)) {
+            std::cerr << "Warning: failed to write .mcp.json\n";
+        }
+
+        // -------------------------------------------------------
+        // Step 7: Migrate from CAPABILITIES.md
+        // -------------------------------------------------------
+        fs::path caps_path = project_root / ".codetldr" / "CAPABILITIES.md";
+        if (fs::exists(caps_path)) {
+            std::error_code ec;
+            fs::remove(caps_path, ec);
+            if (!ec) {
+                std::cout << "Removed old .codetldr/CAPABILITIES.md (replaced by CLAUDE.md)\n";
+            } else {
+                std::cerr << "Warning: failed to remove old CAPABILITIES.md: " << ec.message() << "\n";
+            }
+        }
+
+        // -------------------------------------------------------
+        // Step 8: Auto-start daemon
         // -------------------------------------------------------
         start_daemon_for_project(project_root);
 
         // -------------------------------------------------------
-        // Step 7: Print MCP config snippet
+        // Step 9: Print import instruction
         // -------------------------------------------------------
-        std::cout << "\nAdd the following to your Claude Code settings to enable MCP tools:\n\n";
-        std::cout << "{\n";
-        std::cout << "  \"mcpServers\": {\n";
-        std::cout << "    \"codetldr\": {\n";
-        std::cout << "      \"command\": \"codetldr-mcp\",\n";
-        std::cout << "      \"args\": [\"--project-root\", \"" << project_root.string() << "\"]\n";
-        std::cout << "    }\n";
-        std::cout << "  }\n";
-        std::cout << "}\n\n";
-        std::cout << "Add the above to your Claude Code settings to enable MCP tools.\n";
+        const char* BOLD   = "\033[1m";
+        const char* GREEN  = "\033[32m";
+        const char* RESET  = "\033[0m";
+        const char* YELLOW = "\033[33m";
+
+        std::cout << "\n"
+                  << GREEN << "+" << std::string(58, '-') << "+" << RESET << "\n"
+                  << GREEN << "|" << RESET << BOLD
+                  << "  Add to your CLAUDE.md:                              "
+                  << RESET << GREEN << "|" << RESET << "\n"
+                  << GREEN << "|" << RESET << YELLOW << BOLD
+                  << "  @.codetldr/CLAUDE.md                                "
+                  << RESET << GREEN << "|" << RESET << "\n"
+                  << GREEN << "+" << std::string(58, '-') << "+" << RESET << "\n\n";
     });
 }
