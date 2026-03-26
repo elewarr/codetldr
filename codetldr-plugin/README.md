@@ -53,6 +53,15 @@ claude --plugin-dir ./codetldr-plugin --mcp-config ./codetldr-plugin/.mcp.json
 
 **Note:** `--plugin-dir` does not automatically load `.mcp.json`. The `--mcp-config` flag is required separately when using `--plugin-dir` for development testing. After `claude plugin install`, MCP registration is automatic.
 
+## How MCP Server Discovery Works
+
+The plugin `.mcp.json` uses empty args (`"args": []`), while `codetldr init` generates a project-specific `.mcp.json` with explicit `--project-root /path/to/project`. This is intentional:
+
+- **Plugin (portable):** Cannot know the project root at install time. `codetldr-mcp` falls back to detecting the Git root from the current working directory. This works reliably because Claude Code sets cwd to the project root when spawning MCP servers.
+- **Init (project-specific):** Pins the absolute project root path. More reliable if you work with multiple projects or launch Claude Code from a parent directory.
+
+**Recommendation:** For best reliability, run `codetldr init` in each project. The init-generated `.mcp.json` takes precedence over the plugin's when both are present.
+
 ## Validate Plugin Structure
 
 ```bash
