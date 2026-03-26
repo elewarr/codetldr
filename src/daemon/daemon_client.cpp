@@ -6,9 +6,25 @@
 #include <cstring>
 #include <stdexcept>
 
+namespace {
+
+static void check_socket_path_length(const std::filesystem::path& sock_path) {
+    struct sockaddr_un addr{};
+    const std::string s = sock_path.string();
+    if (s.size() >= sizeof(addr.sun_path)) {
+        throw std::runtime_error(
+            "Socket path too long (" + std::to_string(s.size()) +
+            " chars, platform limit " +
+            std::to_string(sizeof(addr.sun_path) - 1) + "): " + s);
+    }
+}
+
+} // anonymous namespace
+
 namespace codetldr {
 
 bool DaemonClient::connect(const std::filesystem::path& sock_path) {
+    check_socket_path_length(sock_path);
     int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
     if (fd < 0) return false;
 

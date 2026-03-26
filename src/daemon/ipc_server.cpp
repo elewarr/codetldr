@@ -8,6 +8,21 @@
 #include <cstring>
 #include <stdexcept>
 
+namespace {
+
+static void check_socket_path_length(const std::filesystem::path& sock_path) {
+    struct sockaddr_un addr{};
+    const std::string s = sock_path.string();
+    if (s.size() >= sizeof(addr.sun_path)) {
+        throw std::runtime_error(
+            "Socket path too long (" + std::to_string(s.size()) +
+            " chars, platform limit " +
+            std::to_string(sizeof(addr.sun_path) - 1) + "): " + s);
+    }
+}
+
+} // anonymous namespace
+
 namespace codetldr {
 
 IpcServer::IpcServer(IpcServer&& other) noexcept
@@ -26,6 +41,7 @@ IpcServer& IpcServer::operator=(IpcServer&& other) noexcept {
 }
 
 bool IpcServer::bind_or_die(const std::filesystem::path& sock_path) {
+    check_socket_path_length(sock_path);
     // Stale socket detection: if file exists, try to connect.
     // ECONNREFUSED -> stale, remove it. Connection succeeds -> live daemon, return false.
     if (std::filesystem::exists(sock_path)) {
