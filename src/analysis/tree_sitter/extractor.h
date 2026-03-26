@@ -32,6 +32,14 @@ struct CfgNode {
     std::string symbol_name; // enclosing function name (for persistence lookup)
 };
 
+struct DfgEdge {
+    std::string edge_type;   // "assignment", "parameter", "return_value"
+    std::string lhs;         // defined variable name
+    std::string rhs_snippet; // truncated RHS text (128 chars); empty for "parameter" edges
+    int line;                // 1-indexed
+    std::string symbol_name; // enclosing function name (for persistence lookup)
+};
+
 struct ExtractionResult {
     std::vector<Symbol> symbols;
     std::vector<CallEdge> calls;
@@ -57,6 +65,14 @@ std::vector<CallEdge> extract_calls(
 std::vector<CfgNode> extract_cfg_nodes(
     const TSTree* tree,
     const TSQuery* cfg_query,
+    const std::string& source,
+    const std::vector<Symbol>& symbols);
+
+// Extract DFG edges (assignments, parameters, return values) from a parsed tree.
+// symbols is the previously extracted symbol list (used for enclosing function lookup).
+std::vector<DfgEdge> extract_dfg_edges(
+    const TSTree* tree,
+    const TSQuery* dfg_query,
     const std::string& source,
     const std::vector<Symbol>& symbols);
 

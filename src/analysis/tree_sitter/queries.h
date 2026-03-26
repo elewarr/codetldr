@@ -6,6 +6,7 @@ struct LanguageQueries {
     const char* symbols;  // Query string for symbol definitions
     const char* calls;    // Query string for call sites
     const char* cfg;      // CFG query string (nullptr for languages without CFG support)
+    const char* dfg;      // DFG query string (nullptr for languages without DFG support)
 };
 
 inline LanguageQueries python() {
@@ -24,7 +25,13 @@ inline LanguageQueries python() {
         "(for_statement) @cfg.loop\n"
         "(return_statement) @cfg.return\n"
         "(try_statement) @cfg.branch\n"
-        "(except_clause) @cfg.branch\n"
+        "(except_clause) @cfg.branch\n",
+        // dfg
+        "(assignment left: (_) @dfg.lhs right: (_) @dfg.rhs) @dfg.assignment\n"
+        "(augmented_assignment left: (_) @dfg.lhs right: (_) @dfg.rhs) @dfg.assignment\n"
+        "(parameters (identifier) @dfg.param) @dfg.parameter\n"
+        "(parameters (default_parameter name: (identifier) @dfg.param)) @dfg.parameter\n"
+        "(return_statement (_) @dfg.rhs) @dfg.return\n"
     };
 }
 
@@ -47,7 +54,13 @@ inline LanguageQueries javascript() {
         "(switch_case) @cfg.branch\n"
         "(return_statement) @cfg.return\n"
         "(try_statement) @cfg.branch\n"
-        "(catch_clause) @cfg.branch\n"
+        "(catch_clause) @cfg.branch\n",
+        // dfg
+        "(lexical_declaration (variable_declarator name: (identifier) @dfg.lhs value: (_) @dfg.rhs)) @dfg.assignment\n"
+        "(variable_declaration (variable_declarator name: (identifier) @dfg.lhs value: (_) @dfg.rhs)) @dfg.assignment\n"
+        "(assignment_expression left: (identifier) @dfg.lhs right: (_) @dfg.rhs) @dfg.assignment\n"
+        "(formal_parameters (identifier) @dfg.param) @dfg.parameter\n"
+        "(return_statement (_) @dfg.rhs) @dfg.return\n"
     };
 }
 
@@ -62,6 +75,8 @@ inline LanguageQueries typescript() {
         "(call_expression function: (identifier) @name) @reference.call\n"
         "(call_expression function: (member_expression property: (property_identifier) @name)) @reference.call\n",
         // cfg -- no CFG support for TypeScript in this plan
+        nullptr,
+        // dfg -- no DFG support for TypeScript in this plan
         nullptr
     };
 }
@@ -83,6 +98,8 @@ inline LanguageQueries rust() {
         "(call_expression function: (identifier) @name) @reference.call\n"
         "(call_expression function: (scoped_identifier name: (identifier) @name)) @reference.call\n",
         // cfg -- no CFG support for Rust in this plan
+        nullptr,
+        // dfg -- no DFG support for Rust in this plan
         nullptr
     };
 }
@@ -102,7 +119,13 @@ inline LanguageQueries c() {
         "(for_statement) @cfg.loop\n"
         "(do_statement) @cfg.loop\n"
         "(case_statement) @cfg.branch\n"
-        "(return_statement) @cfg.return\n"
+        "(return_statement) @cfg.return\n",
+        // dfg
+        "(declaration declarator: (init_declarator declarator: (identifier) @dfg.lhs value: (_) @dfg.rhs)) @dfg.assignment\n"
+        "(assignment_expression left: (identifier) @dfg.lhs right: (_) @dfg.rhs) @dfg.assignment\n"
+        "(parameter_declaration declarator: (identifier) @dfg.param) @dfg.parameter\n"
+        "(parameter_declaration declarator: (pointer_declarator declarator: (identifier) @dfg.param)) @dfg.parameter\n"
+        "(return_statement (_) @dfg.rhs) @dfg.return\n"
     };
 }
 
@@ -126,7 +149,14 @@ inline LanguageQueries cpp() {
         "(case_statement) @cfg.branch\n"
         "(return_statement) @cfg.return\n"
         "(try_statement) @cfg.branch\n"
-        "(catch_clause) @cfg.branch\n"
+        "(catch_clause) @cfg.branch\n",
+        // dfg
+        "(declaration declarator: (init_declarator declarator: (identifier) @dfg.lhs value: (_) @dfg.rhs)) @dfg.assignment\n"
+        "(assignment_expression left: (identifier) @dfg.lhs right: (_) @dfg.rhs) @dfg.assignment\n"
+        "(parameter_declaration declarator: (identifier) @dfg.param) @dfg.parameter\n"
+        "(parameter_declaration declarator: (pointer_declarator declarator: (identifier) @dfg.param)) @dfg.parameter\n"
+        "(parameter_declaration declarator: (reference_declarator (identifier) @dfg.param)) @dfg.parameter\n"
+        "(return_statement (_) @dfg.rhs) @dfg.return\n"
     };
 }
 
@@ -139,6 +169,8 @@ inline LanguageQueries java() {
         // calls
         "(method_invocation name: (identifier) @name) @reference.call\n",
         // cfg -- no CFG support for Java in this plan
+        nullptr,
+        // dfg -- no DFG support for Java in this plan
         nullptr
     };
 }
@@ -151,6 +183,8 @@ inline LanguageQueries kotlin() {
         // calls
         "(call_expression (simple_identifier) @name) @reference.call\n",
         // cfg -- no CFG support for Kotlin in this plan
+        nullptr,
+        // dfg -- no DFG support for Kotlin in this plan
         nullptr
     };
 }
@@ -165,6 +199,8 @@ inline LanguageQueries swift() {
         // calls
         "(call_expression (simple_identifier) @name) @reference.call\n",
         // cfg -- no CFG support for Swift in this plan
+        nullptr,
+        // dfg -- no DFG support for Swift in this plan
         nullptr
     };
 }
@@ -180,6 +216,8 @@ inline LanguageQueries objc() {
         "(message_expression method: (identifier) @name) @reference.call\n"
         "(call_expression function: (identifier) @name) @reference.call\n",
         // cfg -- no CFG support for ObjC in this plan
+        nullptr,
+        // dfg -- no DFG support for ObjC in this plan
         nullptr
     };
 }
