@@ -140,3 +140,31 @@ target_link_libraries(test_mcp_provider PRIVATE nlohmann_json::nlohmann_json)
 add_test(NAME mcp_provider COMMAND test_mcp_provider)
 add_dependencies(test_mcp_provider codetldr-mcp)
 set_tests_properties(mcp_provider PROPERTIES ENVIRONMENT "MCP_BIN=$<TARGET_FILE:codetldr-mcp>")
+
+# Integration tests (bash scripts)
+add_test(NAME e2e_cli
+  COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_e2e_cli.sh
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+set_tests_properties(e2e_cli PROPERTIES
+  LABELS "integration"
+  TIMEOUT 60
+)
+
+add_test(NAME e2e_agentic
+  COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_e2e_agentic.sh
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+set_tests_properties(e2e_agentic PROPERTIES
+  LABELS "integration;agentic"
+  TIMEOUT 120
+)
+
+add_test(NAME plugin_artifacts
+  COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_plugin_artifacts.sh
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+set_tests_properties(plugin_artifacts PROPERTIES
+  LABELS "integration"
+  TIMEOUT 30
+)
