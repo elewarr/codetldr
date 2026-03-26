@@ -14,6 +14,9 @@
 #include <filesystem>
 #include <algorithm>
 #include <unordered_set>
+#ifdef __linux__
+#include <fstream>
+#endif
 
 namespace {
 // Global stop flag — set by signal handlers (SIGTERM/SIGINT)
@@ -22,6 +25,22 @@ std::atomic<bool> g_stop{false};
 void signal_handler(int /*sig*/) {
     g_stop.store(true, std::memory_order_relaxed);
 }
+
+#ifdef __linux__
+static void warn_inotify_limit() {
+    std::ifstream f("/proc/sys/fs/inotify/max_user_watches");
+    if (!f) return;
+    int max_watches = 0;
+    f >> max_watches;
+    if (max_watches > 0 && max_watches < 8192) {
+        spdlog::warn(
+            "inotify max_user_watches={} is low — file watching may fail for large projects. "
+            "Increase with: echo fs.inotify.max_user_watches=524288 | "
+            "sudo tee /etc/sysctl.d/40-inotify.conf && sudo sysctl -p",
+            max_watches);
+    }
+}
+#endif
 
 // Source file extensions to index during initial scan (mirrors FileWatcher::is_source_file())
 static const std::unordered_set<std::string> kScanExtensions = {
@@ -64,6 +83,10 @@ Coordinator::Coordinator(const std::filesystem::path& project_root,
     // Make read end non-blocking
     int flags = ::fcntl(wakeup_pipe_[0], F_GETFL, 0);
     ::fcntl(wakeup_pipe_[0], F_SETFL, flags | O_NONBLOCK);
+
+#ifdef __linux__
+    warn_inotify_limit();
+#endif
 
     // Initialize status
     current_status_.state       = DaemonState::kStarting;
