@@ -15,6 +15,7 @@ void register_search_cmd(CLI::App& app, std::string& project_root_str) {
     // Positional query argument
     static std::string query_str;
     static std::string kind_str;
+    static std::string lang_str;
     static int limit = 20;
     static bool json_output = false;
     static bool text_mode = false;
@@ -23,6 +24,8 @@ void register_search_cmd(CLI::App& app, std::string& project_root_str) {
     search_cmd->add_option("query", query_str, "Search query")->required();
     search_cmd->add_option("--kind", kind_str,
                            "Filter by symbol kind: function, class, method, struct, enum");
+    search_cmd->add_option("--lang", lang_str,
+                           "Filter results by programming language (e.g. cpp, python, typescript)");
     search_cmd->add_option("--limit", limit, "Maximum results")->default_val(20);
     search_cmd->add_flag("--json", json_output, "Output as JSON");
     search_cmd->add_flag("--text", text_mode, "Full-text search (instead of symbol search)");
@@ -58,6 +61,9 @@ void register_search_cmd(CLI::App& app, std::string& project_root_str) {
         params["limit"] = limit;
         if (!kind_str.empty()) {
             params["kind"] = kind_str;
+        }
+        if (!lang_str.empty()) {
+            params["lang"] = lang_str;
         }
 
         // Call appropriate method
