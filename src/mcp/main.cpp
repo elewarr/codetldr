@@ -35,6 +35,7 @@ static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
             {"properties", {
                 {"query", {{"type","string"},{"description","Symbol name or partial name to search for"}}},
                 {"kind",  {{"type","string"},{"description","Filter by symbol kind: function, class, method, struct, enum (optional)"}}},
+                {"lang",  {{"type","string"},{"description","Filter by programming language (e.g. cpp, python). Optional."}}},
                 {"limit", {{"type","integer"},{"description","Maximum results (default 20)"}}}
             }},
             {"required", nlohmann::json::array({"query"})}
@@ -48,6 +49,7 @@ static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
             {"type", "object"},
             {"properties", {
                 {"query", {{"type","string"},{"description","Search terms"}}},
+                {"lang",  {{"type","string"},{"description","Filter by programming language (e.g. cpp, python). Optional."}}},
                 {"limit", {{"type","integer"},{"description","Maximum results (default 20)"}}}
             }},
             {"required", nlohmann::json::array({"query"})}
@@ -91,6 +93,20 @@ static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
                 {"depth",     {{"type","integer"},{"description","Traversal depth (default 1)"}}}
             }},
             {"required", nlohmann::json::array({"name"})}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "semantic_search"},
+        {"description", "Semantic similarity search over indexed symbols using FAISS vector index. Finds conceptually related code even without exact keyword matches. Requires semantic indexing to be enabled."},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"query", {{"type","string"},{"description","Natural language or code description to search for"}}},
+                {"lang",  {{"type","string"},{"description","Filter by programming language (e.g. cpp, python). Optional."}}},
+                {"limit", {{"type","integer"},{"description","Maximum results (default 10)"}}}
+            }},
+            {"required", nlohmann::json::array({"query"})}
         }}
     });
 
@@ -160,6 +176,8 @@ static nlohmann::json dispatch_tool_call(const std::string& tool_name,
             daemon_resp = client.call("search_symbols", arguments);
         } else if (tool_name == "search_text") {
             daemon_resp = client.call("search_text", arguments);
+        } else if (tool_name == "semantic_search") {
+            daemon_resp = client.call("semantic_search", arguments);
         } else if (tool_name == "get_file_summary") {
             daemon_resp = client.call("get_file_summary", arguments);
         } else if (tool_name == "get_function_detail") {
