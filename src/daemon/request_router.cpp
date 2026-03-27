@@ -50,10 +50,11 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
     } else if (method == "search_text") {
         try {
             const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
-            std::string query = params.value("query", "");
-            int limit = params.value("limit", 20);
+            std::string query    = params.value("query", "");
+            std::string language = params.value("lang", "");
+            int limit            = params.value("limit", 20);
 
-            auto results = search_engine_->search_text(query, "", limit);
+            auto results = search_engine_->search_text(query, language, limit);
 
             nlohmann::json arr = nlohmann::json::array();
             for (const auto& r : results) {
@@ -69,6 +70,19 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
                 arr.push_back(std::move(item));
             }
             response["result"] = std::move(arr);
+            // Unrecognized language warning: empty results + unknown language
+            if (!language.empty() && arr.empty()) {
+                try {
+                    SQLite::Statement lc(db_,
+                        "SELECT COUNT(*) FROM files WHERE language = ?");
+                    lc.bind(1, language);
+                    lc.executeStep();
+                    if (lc.getColumn(0).getInt() == 0) {
+                        response["warning"] = "Unknown language '" + language +
+                            "'. No files indexed for this language.";
+                    }
+                } catch (...) {}
+            }
         } catch (const std::exception& e) {
             nlohmann::json error;
             error["code"]    = -32000;
@@ -79,11 +93,12 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
     } else if (method == "search_symbols") {
         try {
             const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
-            std::string query = params.value("query", "");
-            std::string kind  = params.value("kind", "");
-            int limit = params.value("limit", 20);
+            std::string query    = params.value("query", "");
+            std::string kind     = params.value("kind", "");
+            std::string language = params.value("lang", "");
+            int limit            = params.value("limit", 20);
 
-            auto results = search_engine_->search_symbols(query, kind, "", limit);
+            auto results = search_engine_->search_symbols(query, kind, language, limit);
 
             nlohmann::json arr = nlohmann::json::array();
             for (const auto& r : results) {
@@ -99,6 +114,19 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
                 arr.push_back(std::move(item));
             }
             response["result"] = std::move(arr);
+            // Unrecognized language warning: empty results + unknown language
+            if (!language.empty() && arr.empty()) {
+                try {
+                    SQLite::Statement lc(db_,
+                        "SELECT COUNT(*) FROM files WHERE language = ?");
+                    lc.bind(1, language);
+                    lc.executeStep();
+                    if (lc.getColumn(0).getInt() == 0) {
+                        response["warning"] = "Unknown language '" + language +
+                            "'. No files indexed for this language.";
+                    }
+                } catch (...) {}
+            }
         } catch (const std::exception& e) {
             nlohmann::json error;
             error["code"]    = -32000;
@@ -413,6 +441,45 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
             error["message"] = e.what();
             response["error"] = error;
         }
+
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+    } else if (method == "semantic_search") {
+        try {
+            const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
+            std::string query    = params.value("query", "");
+            std::string language = params.value("lang", "");
+            int limit            = params.value("limit", 10);
+
+            auto search_results = coordinator_.semantic_search(query, limit, language);
+
+            nlohmann::json arr = nlohmann::json::array();
+            for (const auto& [sym_id, dist] : search_results) {
+                nlohmann::json item;
+                item["symbol_id"] = sym_id;
+                item["distance"]  = dist;
+                arr.push_back(std::move(item));
+            }
+            response["result"] = std::move(arr);
+            // Unrecognized language warning
+            if (!language.empty() && arr.empty()) {
+                try {
+                    SQLite::Statement lc(db_,
+                        "SELECT COUNT(*) FROM files WHERE language = ?");
+                    lc.bind(1, language);
+                    lc.executeStep();
+                    if (lc.getColumn(0).getInt() == 0) {
+                        response["warning"] = "Unknown language '" + language +
+                            "'. No files indexed for this language.";
+                    }
+                } catch (...) {}
+            }
+        } catch (const std::exception& e) {
+            nlohmann::json error;
+            error["code"]    = -32000;
+            error["message"] = e.what();
+            response["error"] = error;
+        }
+#endif
 
     } else {
         nlohmann::json error;
