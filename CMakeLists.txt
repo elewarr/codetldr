@@ -15,6 +15,13 @@ option(CODETLDR_ENABLE_SEMANTIC_SEARCH
   "Enable semantic search (requires ONNX Runtime, FAISS, Rust toolchain)"
   OFF)
 
+# codetldr_embedding_stats: always-on EmbeddingStats ring buffer and stubs.
+# Available without CODETLDR_ENABLE_SEMANTIC_SEARCH for observability (Phase 22+).
+add_library(codetldr_embedding_stats STATIC
+  src/embedding/embedding_worker.cpp
+)
+target_include_directories(codetldr_embedding_stats PUBLIC src)
+
 if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
   find_program(RUSTC rustc REQUIRED
     DOC "Rust compiler (rustc) is required to build tokenizers-cpp. Install via: curl https://sh.rustup.rs -sSf | sh")
@@ -22,12 +29,9 @@ if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
 
   add_library(codetldr_embedding STATIC
     src/embedding/placeholder.cpp
-    src/embedding/vector_store.cpp
-    src/embedding/model_manager.cpp
   )
   target_link_libraries(codetldr_embedding
-    PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp
-           spdlog::spdlog nlohmann_json::nlohmann_json)
+    PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp codetldr_embedding_stats)
   target_include_directories(codetldr_embedding PUBLIC src)
   target_compile_definitions(codetldr_embedding
     PUBLIC CODETLDR_ENABLE_SEMANTIC_SEARCH)
@@ -73,23 +77,16 @@ add_library(codetldr_daemon
 )
 target_include_directories(codetldr_daemon PUBLIC src)
 target_link_libraries(codetldr_daemon
-  PUBLIC codetldr_foundation codetldr_analysis codetldr_query
-         nlohmann_json::nlohmann_json spdlog::spdlog CLI11::CLI11 tomlplusplus::tomlplusplus
-         efsw-static Threads::Threads)
+  PUBLIC codetldr_foundation codetldr_analysis codetldr_query codetldr_embedding_stats
+         nlohmann_json::nlohmann_json spdlog::spdlog CLI11::CLI11 efsw-static Threads::Threads)
 
 add_library(codetldr_query
   src/query/search_engine.cpp
   src/query/context_builder.cpp
-  src/query/hybrid_search_engine.cpp
 )
 target_include_directories(codetldr_query PUBLIC src)
 target_link_libraries(codetldr_query
   PUBLIC codetldr_foundation nlohmann_json::nlohmann_json)
-
-if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
-  target_link_libraries(codetldr_query PUBLIC codetldr_embedding)
-  target_compile_definitions(codetldr_query PUBLIC CODETLDR_ENABLE_SEMANTIC_SEARCH)
-endif()
 
 add_executable(codetldr-daemon src/daemon/main.cpp)
 target_link_libraries(codetldr-daemon PRIVATE codetldr_daemon)
@@ -162,10 +159,6 @@ add_executable(test_fts5_search tests/test_fts5_search.cpp)
 target_link_libraries(test_fts5_search PRIVATE codetldr_query codetldr_foundation)
 add_test(NAME fts5_search COMMAND test_fts5_search)
 
-add_executable(test_hybrid_search tests/test_hybrid_search.cpp)
-target_link_libraries(test_hybrid_search PRIVATE codetldr_query codetldr_foundation)
-add_test(NAME hybrid_search COMMAND test_hybrid_search)
-
 add_executable(test_context_builder tests/test_context_builder.cpp)
 target_link_libraries(test_context_builder PRIVATE codetldr_query codetldr_foundation)
 add_test(NAME context_builder COMMAND test_context_builder)
@@ -179,8 +172,12 @@ target_link_libraries(test_ignore_filter PRIVATE codetldr_daemon)
 add_test(NAME ignore_filter COMMAND test_ignore_filter)
 
 add_executable(test_new_rpc_methods tests/test_new_rpc_methods.cpp)
-target_link_libraries(test_new_rpc_methods PRIVATE codetldr_daemon codetldr_query codetldr_foundation)
+target_link_libraries(test_new_rpc_methods PRIVATE codetldr_daemon codetldr_query codetldr_foundation codetldr_embedding_stats)
 add_test(NAME new_rpc_methods COMMAND test_new_rpc_methods)
+
+add_executable(test_embedding_worker tests/test_embedding_worker.cpp)
+target_link_libraries(test_embedding_worker PRIVATE codetldr_embedding_stats)
+add_test(NAME embedding_worker COMMAND test_embedding_worker)
 
 add_executable(test_cli_init tests/test_cli_init.cpp)
 target_link_libraries(test_cli_init PRIVATE codetldr_daemon codetldr_analysis codetldr_foundation)
