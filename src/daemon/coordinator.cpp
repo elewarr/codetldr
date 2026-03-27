@@ -1,6 +1,9 @@
 #include "daemon/coordinator.h"
 #include "analysis/pipeline.h"
 #include "common/logging.h"
+#include "embedding/embedding_worker.h"
+#include "embedding/model_manager.h"
+#include "embedding/vector_store.h"
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <spdlog/spdlog.h>
 #include <poll.h>
@@ -362,6 +365,98 @@ void Coordinator::notify_wakeup() {
         char byte = 1;
         ::write(wakeup_pipe_[1], &byte, 1);
     }
+}
+
+nlohmann::json Coordinator::get_embedding_stats_json() {
+    nlohmann::json j;
+
+    // --- Model info ---
+    std::string model_name = "none";
+    std::string model_status_str = "not_configured";
+    if (model_manager_) {
+        switch (model_manager_->status()) {
+            case ModelStatus::loaded:             model_status_str = "loaded"; break;
+            case ModelStatus::model_not_installed: model_status_str = "not_installed"; break;
+            case ModelStatus::load_failed:        model_status_str = "load_failed"; break;
+            case ModelStatus::not_configured:     model_status_str = "not_configured"; break;
+        }
+        model_name = "configured";
+    }
+    j["model_name"]   = model_name;
+    j["model_status"] = model_status_str;
+
+    // --- Latency metrics from EmbeddingWorker ring buffer ---
+    if (embedding_worker_) {
+        auto snap = embedding_worker_->stats().snapshot();
+        j["latency_p50_ms"]            = snap.p50_ms;
+        j["latency_p95_ms"]            = snap.p95_ms;
+        j["latency_p99_ms"]            = snap.p99_ms;
+        j["latency_avg_ms"]            = snap.avg_ms;
+        j["throughput_chunks_per_sec"] = snap.throughput_chunks_per_sec;
+        j["queue_depth"]               = snap.queue_depth;
+        j["chunks_embedded_total"]     = snap.chunks_processed;
+        j["sample_count"]              = snap.sample_count;
+    } else {
+        j["latency_p50_ms"]            = 0.0;
+        j["latency_p95_ms"]            = 0.0;
+        j["latency_p99_ms"]            = 0.0;
+        j["latency_avg_ms"]            = 0.0;
+        j["throughput_chunks_per_sec"] = 0.0;
+        j["queue_depth"]               = 0;
+        j["chunks_embedded_total"]     = 0;
+        j["sample_count"]              = 0;
+    }
+
+    // --- FAISS index stats ---
+    int64_t faiss_count = vector_store_ ? vector_store_->ntotal() : 0;
+    j["faiss_vector_count"] = faiss_count;
+
+    // --- SQLite embedded count ---
+    int64_t sqlite_count = 0;
+    try {
+        SQLite::Statement q(db_,
+            "SELECT COUNT(DISTINCT symbol_id) FROM embedded_files");
+        if (q.executeStep()) {
+            sqlite_count = q.getColumn(0).getInt64();
+        }
+    } catch (...) {}
+    j["sqlite_embedded_count"] = sqlite_count;
+
+    // --- Health checks ---
+    std::string health = "ok";
+    nlohmann::json degraded = nlohmann::json(nullptr);
+
+    // OBS-03: INDEX_INCONSISTENT — flag if FAISS/SQLite counts diverge by >5%
+    if (faiss_count > 0 || sqlite_count > 0) {
+        int64_t delta = std::abs(faiss_count - sqlite_count);
+        int64_t threshold = std::max(static_cast<int64_t>(10),
+                                     sqlite_count > 0 ? sqlite_count * 5 / 100 : static_cast<int64_t>(10));
+        if (delta > threshold) {
+            health = "degraded";
+            degraded = "INDEX_INCONSISTENT: faiss=" + std::to_string(faiss_count)
+                     + " sqlite=" + std::to_string(sqlite_count)
+                     + " (delta=" + std::to_string(delta) + ")";
+        }
+    }
+
+    // OBS-04: EXECUTION_PROVIDER_FALLBACK — macOS only, only when p50 > 20ms and sample_count >= 10
+#if defined(__APPLE__)
+    if (health == "ok" && embedding_worker_) {
+        auto snap = embedding_worker_->stats().snapshot();
+        if (snap.sample_count >= 10 && snap.p50_ms > 20.0) {
+            health = "degraded";
+            degraded = "EXECUTION_PROVIDER_FALLBACK: p50=" + std::to_string(snap.p50_ms)
+                     + "ms exceeds 20ms threshold — CoreML EP may have fallen back to CPU. "
+                       "Remediation: ensure Xcode Command Line Tools are installed and "
+                       "the model has been CoreML-compiled: codetldr model download --force";
+        }
+    }
+#endif
+
+    j["health"]   = health;
+    j["degraded"] = degraded;
+
+    return j;
 }
 
 void Coordinator::shutdown() {
