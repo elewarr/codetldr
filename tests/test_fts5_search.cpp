@@ -109,7 +109,7 @@ int main() {
 
     // Test 5: Search with limit=1 returns exactly 1 result
     {
-        auto results = engine.search_text("search", 1);
+        auto results = engine.search_text("search", "", 1);
         assert(results.size() == 1);
         std::cout << "PASS: limit=1 returns exactly 1 result\n";
     }
