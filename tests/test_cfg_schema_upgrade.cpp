@@ -80,9 +80,9 @@ int main() {
     // === Test 1: Database::open() upgrades v4 -> v9 transparently ===
     auto db = codetldr::Database::open(db_path);
 
-    assert_true(db.schema_version() == 9,
-        "schema_version should be 9 after upgrade, got " + std::to_string(db.schema_version()));
-    std::cout << "PASS: schema_version() == 9 after v4 -> v9 upgrade\n";
+    assert_true(db.schema_version() == 10,
+        "schema_version should be 10 after upgrade, got " + std::to_string(db.schema_version()));
+    std::cout << "PASS: schema_version() == 10 after v4 -> v10 upgrade\n";
 
     // === Test 2: cfg_nodes table exists with all 7 columns ===
     {

@@ -456,6 +456,131 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
             response["error"] = error;
         }
 
+    } else if (method == "get_incoming_callers") {
+        try {
+            const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
+
+            if (!params.contains("name") || !params["name"].is_string()) {
+                nlohmann::json error;
+                error["code"]    = -32602;
+                error["message"] = "name required";
+                response["error"] = error;
+            } else {
+                std::string name      = params["name"].get<std::string>();
+                std::string file_hint = params.value("file", "");
+
+                SymbolInfo sym = context_builder_->find_symbol(name, file_hint);
+
+                nlohmann::json result;
+                result["name"]    = name;
+                result["found"]   = sym.found;
+                result["callers"] = nlohmann::json::array();
+                result["source"]  = "none";
+
+                if (!sym.found) {
+                    response["result"] = std::move(result);
+                } else {
+                    // Step 1: Try lsp_call_hierarchy_callers (richest data — from LSP call hierarchy protocol)
+                    bool has_hierarchy_data = false;
+                    try {
+                        SQLite::Statement q(db_, R"sql(
+                            SELECT caller_name, caller_kind, caller_file_path, caller_line, caller_col
+                            FROM lsp_call_hierarchy_callers
+                            WHERE callee_file_id = (SELECT id FROM files WHERE path = ?)
+                              AND callee_name = ?
+                        )sql");
+                        q.bind(1, sym.file_path);
+                        q.bind(2, sym.name);
+                        while (q.executeStep()) {
+                            has_hierarchy_data = true;
+                            nlohmann::json edge;
+                            edge["name"]   = q.getColumn(0).isNull() ? "" : q.getColumn(0).getString();
+                            edge["kind"]   = q.getColumn(1).isNull() ? "" : q.getColumn(1).getString();
+                            edge["file"]   = q.getColumn(2).isNull() ? "" : q.getColumn(2).getString();
+                            edge["line"]   = q.getColumn(3).isNull() ? 0 : q.getColumn(3).getInt();
+                            edge["col"]    = q.getColumn(4).isNull() ? 0 : q.getColumn(4).getInt();
+                            edge["source"] = "lsp-call-hierarchy";
+                            result["callers"].push_back(std::move(edge));
+                        }
+                    } catch (...) {}
+
+                    if (has_hierarchy_data) {
+                        result["source"] = "lsp-call-hierarchy";
+                        response["result"] = std::move(result);
+                    } else {
+                        // Step 2: Fallback to lsp_references table
+                        bool has_lsp_data = false;
+                        try {
+                            SQLite::Statement q(db_, R"sql(
+                                SELECT r.caller_file_path, r.caller_line, r.source,
+                                       COALESCE(
+                                           (SELECT s.name FROM symbols s
+                                            JOIN files f ON s.file_id = f.id
+                                            WHERE f.path = r.caller_file_path
+                                              AND s.line_start <= r.caller_line
+                                              AND s.line_end >= r.caller_line
+                                            LIMIT 1),
+                                           '<unknown>'
+                                       ) as caller_name
+                                FROM lsp_references r
+                                WHERE r.callee_file_id = (SELECT id FROM files WHERE path = ?)
+                                  AND r.callee_name = ?
+                            )sql");
+                            q.bind(1, sym.file_path);
+                            q.bind(2, sym.name);
+                            while (q.executeStep()) {
+                                has_lsp_data = true;
+                                nlohmann::json edge;
+                                edge["name"]   = q.getColumn(3).getString();
+                                edge["kind"]   = "";
+                                edge["file"]   = q.getColumn(0).isNull() ? "" : q.getColumn(0).getString();
+                                edge["line"]   = q.getColumn(1).isNull() ? 0 : q.getColumn(1).getInt();
+                                edge["col"]    = 0;
+                                edge["source"] = "lsp";
+                                result["callers"].push_back(std::move(edge));
+                            }
+                        } catch (...) {}
+
+                        if (has_lsp_data) {
+                            result["source"] = "lsp";
+                            response["result"] = std::move(result);
+                        } else {
+                            // Step 3: Fallback to Tree-sitter approximate via calls table reverse lookup
+                            try {
+                                SQLite::Statement q(db_, R"sql(
+                                    SELECT DISTINCT s.name
+                                    FROM calls c
+                                    JOIN symbols s ON s.id = c.caller_id
+                                    WHERE c.callee_name = ?
+                                )sql");
+                                q.bind(1, sym.name);
+                                while (q.executeStep()) {
+                                    nlohmann::json edge;
+                                    edge["name"]   = q.getColumn(0).getString();
+                                    edge["kind"]   = "";
+                                    edge["file"]   = "";
+                                    edge["line"]   = 0;
+                                    edge["col"]    = 0;
+                                    edge["source"] = "tree-sitter-approximate";
+                                    result["callers"].push_back(std::move(edge));
+                                }
+                            } catch (...) {}
+
+                            if (!result["callers"].empty()) {
+                                result["source"] = "tree-sitter-approximate";
+                            }
+                            response["result"] = std::move(result);
+                        }
+                    }
+                }
+            }
+        } catch (const std::exception& e) {
+            nlohmann::json error;
+            error["code"]    = -32000;
+            error["message"] = e.what();
+            response["error"] = error;
+        }
+
     } else if (method == "get_project_overview") {
         try {
             nlohmann::json result;

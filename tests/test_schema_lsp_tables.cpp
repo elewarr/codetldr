@@ -55,10 +55,10 @@ int main() {
     // === Apply all migrations via Database::open() ===
     auto db = codetldr::Database::open(db_path);
 
-    // Verify we're at version 9
-    assert_true(db.schema_version() == 9,
-        "schema_version should be 9 after all migrations, got " + std::to_string(db.schema_version()));
-    std::cout << "PASS: schema_version() == 9 after all migrations\n";
+    // Verify we're at version 10
+    assert_true(db.schema_version() == 10,
+        "schema_version should be 10 after all migrations, got " + std::to_string(db.schema_version()));
+    std::cout << "PASS: schema_version() == 10 after all migrations\n";
 
     // === Test 1: lsp_definitions table exists with correct columns ===
     {
