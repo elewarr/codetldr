@@ -18,12 +18,12 @@ AnalysisResult analyze_file(SQLite::Database& db,
                               const std::filesystem::path& file_path) {
     // a. Read file content from disk
     if (!std::filesystem::exists(file_path)) {
-        return {0, 0, 0, 0, false, "file not found: " + file_path.string()};
+        return {0, 0, 0, 0, 0, false, "file not found: " + file_path.string()};
     }
 
     std::ifstream f(file_path);
     if (!f.is_open()) {
-        return {0, 0, 0, 0, false, "cannot open file: " + file_path.string()};
+        return {0, 0, 0, 0, 0, false, "cannot open file: " + file_path.string()};
     }
     std::ostringstream ss;
     ss << f.rdbuf();
@@ -33,7 +33,7 @@ AnalysisResult analyze_file(SQLite::Database& db,
     std::string ext = file_path.extension().string();
     const auto* entry = registry.for_extension(ext);
     if (!entry) {
-        return {0, 0, 0, 0, false, "unsupported extension: " + ext};
+        return {0, 0, 0, 0, 0, false, "unsupported extension: " + ext};
     }
 
     // c. Upsert the file into the `files` table
@@ -57,7 +57,7 @@ AnalysisResult analyze_file(SQLite::Database& db,
         SQLite::Statement get_id(db, "SELECT id FROM files WHERE path = ?");
         get_id.bind(1, file_path.string());
         if (!get_id.executeStep()) {
-            return {0, 0, 0, 0, false, "failed to get file_id for: " + file_path.string()};
+            return {0, 0, 0, 0, 0, false, "failed to get file_id for: " + file_path.string()};
         }
         file_id = get_id.getColumn(0).getInt64();
     }
@@ -65,7 +65,7 @@ AnalysisResult analyze_file(SQLite::Database& db,
     // d. Parse source with Tree-sitter
     auto tree = parse_source(entry->language, content);
     if (!tree) {
-        return {0, 0, 0, 0, false, "parse failed for " + file_path.string()};
+        return {0, 0, 0, 0, 0, false, "parse failed for " + file_path.string()};
     }
 
     // e. Extract symbols, calls, and CFG nodes
@@ -242,12 +242,12 @@ AnalysisResult analyze_file(SQLite::Database& db,
 
         txn.commit();
     } catch (const SQLite::Exception& e) {
-        return {0, 0, 0, 0, false, std::string("SQLite error: ") + e.what()};
+        return {0, 0, 0, 0, 0, false, std::string("SQLite error: ") + e.what()};
     }
 
     return {static_cast<int>(symbols.size()), static_cast<int>(calls.size()),
             static_cast<int>(cfg_nodes_vec.size()), static_cast<int>(dfg_edges_vec.size()),
-            true, {}};
+            file_id, true, {}};
 }
 
 } // namespace codetldr
