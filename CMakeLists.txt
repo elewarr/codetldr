@@ -22,9 +22,12 @@ if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
 
   add_library(codetldr_embedding STATIC
     src/embedding/placeholder.cpp
+    src/embedding/vector_store.cpp
+    src/embedding/model_manager.cpp
   )
   target_link_libraries(codetldr_embedding
-    PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp)
+    PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp
+           spdlog::spdlog nlohmann_json::nlohmann_json)
   target_include_directories(codetldr_embedding PUBLIC src)
   target_compile_definitions(codetldr_embedding
     PUBLIC CODETLDR_ENABLE_SEMANTIC_SEARCH)

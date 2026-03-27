@@ -100,10 +100,11 @@ Coordinator::Coordinator(const std::filesystem::path& project_root,
     status_writer_ = std::make_unique<StatusWriter>(status_path);
 
     // Set up RequestRouter with hybrid search config
-    std::filesystem::path db_path = project_root_ / ".codetldr" / "index.sqlite";
+    std::filesystem::path db_path     = project_root_ / ".codetldr" / "index.sqlite";
+    std::filesystem::path config_path = project_root_ / ".codetldr" / "config.toml";
     router_ = std::make_unique<RequestRouter>(*this, db_, db_path,
                                                /*model=*/nullptr, /*store=*/nullptr,
-                                               hybrid_config);
+                                               hybrid_config, config_path);
 }
 
 Coordinator::~Coordinator() {
