@@ -22,6 +22,7 @@ if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
 
   add_library(codetldr_embedding STATIC
     src/embedding/placeholder.cpp
+    src/embedding/vector_store.cpp
   )
   target_link_libraries(codetldr_embedding
     PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp)
