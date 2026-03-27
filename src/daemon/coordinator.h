@@ -22,6 +22,7 @@ namespace codetldr {
     class VectorStore;
     class ModelManager;
     class LspManager;
+    class LspCallGraphResolver;
 }
 
 namespace codetldr {
@@ -86,6 +87,9 @@ public:
     // Inject LSP lifecycle manager (non-owning). Call before run(). (Phase 24)
     void set_lsp_manager(LspManager* mgr) { lsp_manager_ = mgr; }
 
+    // Inject LSP call graph resolver (owning). Call before run(). (Phase 26)
+    void set_lsp_resolver(std::unique_ptr<LspCallGraphResolver> resolver);
+
 private:
     void shutdown();
     void process_file_events();
@@ -126,6 +130,10 @@ private:
 
     // LSP lifecycle manager — non-owning, injected by main.cpp (Phase 24)
     LspManager* lsp_manager_ = nullptr;
+
+    // LSP call graph resolver — owning, injected by main.cpp (Phase 26)
+    std::unique_ptr<LspCallGraphResolver> lsp_resolver_;
 };
+
 
 } // namespace codetldr

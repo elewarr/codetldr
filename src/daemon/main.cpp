@@ -5,6 +5,7 @@
 #include "storage/database.h"
 #include "analysis/tree_sitter/language_registry.h"
 #include "lsp/lsp_manager.h"
+#include "lsp/lsp_call_graph_resolver.h"
 
 #include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
@@ -144,6 +145,11 @@ int main(int argc, char* argv[]) {
 
         lsp_manager.set_project_root(project_root);
         coordinator.set_lsp_manager(&lsp_manager);
+
+        // Phase 26: LSP call graph resolver
+        auto lsp_resolver = std::make_unique<codetldr::LspCallGraphResolver>(
+            db.raw(), lsp_manager);
+        coordinator.set_lsp_resolver(std::move(lsp_resolver));
 
         coordinator.run();
 

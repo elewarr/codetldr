@@ -103,10 +103,11 @@ add_library(codetldr_lsp STATIC
   src/lsp/lsp_framing.cpp
   src/lsp/lsp_transport.cpp
   src/lsp/lsp_manager.cpp
+  src/lsp/lsp_call_graph_resolver.cpp
 )
 target_include_directories(codetldr_lsp PUBLIC src)
 target_link_libraries(codetldr_lsp
-  PUBLIC nlohmann_json::nlohmann_json spdlog::spdlog)
+  PUBLIC nlohmann_json::nlohmann_json spdlog::spdlog SQLiteCpp)
 
 enable_testing()
 
