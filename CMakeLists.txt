@@ -100,7 +100,7 @@ target_link_libraries(codetldr_query
 add_executable(codetldr-daemon src/daemon/main.cpp)
 target_link_libraries(codetldr-daemon PRIVATE codetldr_daemon)
 
-add_executable(codetldr src/cli/main.cpp src/cli/search_cmd.cpp src/cli/init_cmd.cpp)
+add_executable(codetldr src/cli/main.cpp src/cli/search_cmd.cpp src/cli/init_cmd.cpp src/cli/model_cmd.cpp)
 target_link_libraries(codetldr PRIVATE codetldr_daemon)
 
 add_executable(codetldr-mcp src/mcp/main.cpp)
@@ -197,6 +197,11 @@ else()
     codetldr_daemon codetldr_query codetldr_foundation codetldr_analysis)
 endif()
 add_test(NAME semantic_search COMMAND test_semantic_search)
+
+add_executable(test_model_download tests/test_model_download.cpp)
+target_include_directories(test_model_download PRIVATE src)
+target_link_libraries(test_model_download PRIVATE codetldr_foundation)
+add_test(NAME model_download COMMAND test_model_download)
 
 add_executable(test_mcp_provider tests/test_mcp_provider.cpp)
 target_link_libraries(test_mcp_provider PRIVATE nlohmann_json::nlohmann_json)
