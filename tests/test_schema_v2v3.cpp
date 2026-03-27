@@ -43,10 +43,10 @@ int main() {
     // Open database - runs migrations
     auto db = codetldr::Database::open(db_path);
 
-    // Test: schema version == 9 (migrations 8+9 add lsp_definitions and lsp_references)
-    assert_true(db.schema_version() == 9,
-        "schema_version should be 9 after migrations, got " + std::to_string(db.schema_version()));
-    std::cout << "PASS: schema_version == 9\n";
+    // Test: schema version == 10 (migrations 8-10 add lsp_definitions, lsp_references, lsp_call_hierarchy_callers, lsp_dependencies)
+    assert_true(db.schema_version() == 10,
+        "schema_version should be 10 after migrations, got " + std::to_string(db.schema_version()));
+    std::cout << "PASS: schema_version == 10\n";
 
     // Test: symbols table columns
     {
