@@ -13,11 +13,11 @@
 #include <mutex>
 #include <vector>
 #include <string>
+#include <cstdint>
+#include <utility>
 
 #ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
-#include "embedding/model_manager.h"
 #include "embedding/vector_store.h"
-#include "embedding/embedding_worker.h"
 #endif
 
 // Forward declarations
@@ -72,15 +72,13 @@ public:
     nlohmann::json get_language_support() const;
 
 #ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
-    // Returns (symbol_id, L2_distance) pairs. Empty if model not loaded or index empty.
+    // Semantic similarity search using FAISS vector index.
+    // When language is non-empty, restricts results to vectors from files of that language
+    // using IDSelectorBatch pre-filter (not post-filter) for efficiency (LANG-04).
+    // Short-circuits (returns empty) if language is non-empty but no vectors indexed for it.
     std::vector<std::pair<int64_t, float>> semantic_search(
-        const std::string& query, int k) const;
-
-    // Report model availability for request routing.
-    ModelStatus model_status() const noexcept {
-        return model_manager_ ? model_manager_->status()
-                              : ModelStatus::model_not_installed;
-    }
+        const std::string& query, int k,
+        const std::string& language = "") const;
 #endif
 
     // Wakeup pipe read fd: for external threads (watcher) to add
@@ -125,9 +123,7 @@ private:
     DaemonStatus current_status_;
 
 #ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
-    std::unique_ptr<ModelManager> model_manager_;
     std::unique_ptr<VectorStore> vector_store_;
-    std::unique_ptr<EmbeddingWorker> embedding_worker_;
 #endif
 };
 

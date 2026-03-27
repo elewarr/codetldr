@@ -1,89 +1,66 @@
-/// vector_store.h — Thread-safe, crash-safe FAISS vector index (Phase 16)
-///
-/// VEC-01: IndexIDMap2(IndexFlatL2) stores and retrieves vectors by int64 ID.
-/// VEC-02: Atomic save via write_index to .tmp then std::filesystem::rename.
-/// VEC-03: std::shared_mutex — shared lock for search/save, exclusive for add/remove.
-/// VEC-05: Dimension validation at open(); auto-rebuild on mismatch or wrong type.
-///
-/// On L2-normalized vectors (CodeRankEmbed): distance = 2 - 2*cos(theta).
-/// Lower distance = more similar. VectorStore exposes raw L2 distances.
-/// Phase 18 (search surface) converts to cosine similarity if needed.
 #pragma once
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
 
+#include <faiss/IndexIDMap.h>
+#include <faiss/Index.h>
+#include <faiss/impl/IDSelector.h>
+#include <shared_mutex>
+#include <vector>
+#include <utility>
 #include <cstdint>
 #include <filesystem>
-#include <memory>
-#include <shared_mutex>
-#include <utility>
-#include <vector>
-
-// IndexIDMap2 is a type alias (using IndexIDMap2 = IndexIDMap2Template<Index>)
-// so it cannot be forward-declared as a struct. Include the FAISS header here.
-#include <faiss/IndexIDMap.h>
 
 namespace codetldr {
 
+/// Thread-safe FAISS vector store for symbol embeddings.
+/// Uses IndexIDMap2 over IndexFlatL2 to map external symbol IDs to dense vectors.
+///
+/// Concurrency: shared_mutex — multiple concurrent readers, exclusive writes.
 class VectorStore {
 public:
-    /// Load existing index from faiss_path, or create a new empty index with the
-    /// given dimension. On load, validates that the stored dimension matches dim
-    /// and that the index type is IndexIDMap2. If either check fails, logs a warning
-    /// and creates a fresh empty index (auto-rebuild per VEC-05).
-    static VectorStore open(const std::filesystem::path& faiss_path, int dim);
+    /// Construct an empty VectorStore with embedding dimension `dim`.
+    explicit VectorStore(int dim);
+    ~VectorStore() = default;
 
-    ~VectorStore();
-    VectorStore(VectorStore&&) noexcept;
-    VectorStore& operator=(VectorStore&&) noexcept;
-
-    // Non-copyable: shared_mutex and unique_ptr are move-only.
+    // Non-copyable
     VectorStore(const VectorStore&) = delete;
     VectorStore& operator=(const VectorStore&) = delete;
 
-    /// Add a single vector with the given application-level ID.
-    /// vec.size() must equal dim(). Holds exclusive lock during call.
-    /// Throws std::invalid_argument if vec.size() != dim().
-    void add(int64_t id, const std::vector<float>& vec);
+    /// Add a single vector for the given symbol_id.
+    /// Replaces any existing entry for that symbol_id (via IDMap2 remove+add).
+    void add(int64_t symbol_id, const std::vector<float>& vec);
 
-    /// Add a batch of (id, vector) pairs in a single FAISS call.
-    /// Each vector must have size == dim(). Holds exclusive lock during call.
-    /// Throws std::invalid_argument if any vector has wrong size.
-    void add_batch(const std::vector<std::pair<int64_t, std::vector<float>>>& items);
+    /// Remove the vector for the given symbol_id.
+    void remove(int64_t symbol_id);
 
-    /// Remove vectors by their application-level IDs.
-    /// Empty ids vector is a no-op. Holds exclusive lock during call.
-    void remove(const std::vector<int64_t>& ids);
-
-    /// K-nearest-neighbor search. Returns (id, L2_distance) pairs in ascending
-    /// distance order. Shared lock held during call.
-    /// Returns fewer than k results if index has fewer vectors than k.
-    /// Returns empty vector if index is empty.
+    /// K-nearest-neighbor search (unfiltered).
+    /// Returns (symbol_id, distance) pairs, best match first.
+    /// Shared lock held during call.
     std::vector<std::pair<int64_t, float>> search(
         const std::vector<float>& query, int k) const;
 
-    /// Atomic save: write_index to path + ".tmp", then std::filesystem::rename.
-    /// Shared lock is held (read-only on index state). Concurrent searches may
-    /// proceed during save.
-    void save() const;
+    /// K-nearest-neighbor search with FAISS SearchParameters (e.g. IDSelectorBatch pre-filter).
+    /// params may be nullptr — equivalent to calling the unfiltered overload.
+    /// Shared lock held during call.
+    std::vector<std::pair<int64_t, float>> search(
+        const std::vector<float>& query, int k,
+        const faiss::SearchParameters* params) const;
 
-    /// Total number of vectors currently in the index.
+    /// Total number of vectors currently stored.
     int64_t ntotal() const;
 
-    /// Embedding dimension (immutable after construction).
-    int dim() const noexcept { return dim_; }
+    /// Persist the index to a file.
+    void save(const std::filesystem::path& path) const;
+
+    /// Load the index from a file. Replaces current index.
+    void load(const std::filesystem::path& path);
 
 private:
-    VectorStore() = default;
-
-    std::filesystem::path path_;
-    int dim_ = 0;
-
-    // IndexIDMap2 owns the inner IndexFlatL2 via own_fields = true.
-    // IMPORTANT: inner IndexFlatL2 is allocated with `new`, then passed to
-    // IndexIDMap2 constructor. After setting own_fields = true, the raw pointer
-    // must NOT also be held in a unique_ptr — that would double-free.
-    std::unique_ptr<faiss::IndexIDMap2> index_;
-
+    int dim_;
     mutable std::shared_mutex mutex_;
+    std::unique_ptr<faiss::IndexIDMap2> index_;
 };
 
 } // namespace codetldr
+
+#endif // CODETLDR_ENABLE_SEMANTIC_SEARCH

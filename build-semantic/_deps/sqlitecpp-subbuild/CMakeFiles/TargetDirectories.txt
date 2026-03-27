@@ -1,0 +1,3 @@
+/Users/krle/workspace/mcp/code/build-semantic/_deps/sqlitecpp-subbuild/CMakeFiles/sqlitecpp-populate.dir
+/Users/krle/workspace/mcp/code/build-semantic/_deps/sqlitecpp-subbuild/CMakeFiles/edit_cache.dir
+/Users/krle/workspace/mcp/code/build-semantic/_deps/sqlitecpp-subbuild/CMakeFiles/rebuild_cache.dir

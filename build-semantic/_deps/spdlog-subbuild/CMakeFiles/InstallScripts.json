@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/krle/workspace/mcp/code/build-semantic/_deps/spdlog-subbuild/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

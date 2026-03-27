@@ -22,32 +22,13 @@ if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
 
   add_library(codetldr_embedding STATIC
     src/embedding/placeholder.cpp
-    src/embedding/model_manager.cpp
-    src/embedding/chunk_extractor.cpp
     src/embedding/vector_store.cpp
-    src/embedding/embedding_worker.cpp
   )
   target_link_libraries(codetldr_embedding
-    PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp codetldr_foundation)
+    PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp)
   target_include_directories(codetldr_embedding PUBLIC src)
   target_compile_definitions(codetldr_embedding
     PUBLIC CODETLDR_ENABLE_SEMANTIC_SEARCH)
-
-  add_executable(test_vector_store tests/test_vector_store.cpp)
-  target_link_libraries(test_vector_store PRIVATE codetldr_embedding)
-  add_test(NAME vector_store COMMAND test_vector_store)
-
-  add_executable(test_embedding_worker tests/test_embedding_worker.cpp)
-  target_link_libraries(test_embedding_worker PRIVATE codetldr_embedding codetldr_analysis)
-  add_test(NAME embedding_worker COMMAND test_embedding_worker)
-
-  add_executable(test_embedding_pipeline tests/test_embedding_pipeline.cpp)
-  target_link_libraries(test_embedding_pipeline PRIVATE codetldr_embedding)
-  add_test(NAME embedding_pipeline COMMAND test_embedding_pipeline)
-
-  add_executable(test_chunk_extractor tests/test_chunk_extractor.cpp)
-  target_link_libraries(test_chunk_extractor PRIVATE codetldr_embedding)
-  add_test(NAME chunk_extractor COMMAND test_chunk_extractor)
 endif()
 
 add_library(codetldr_foundation
@@ -93,10 +74,6 @@ target_link_libraries(codetldr_daemon
   PUBLIC codetldr_foundation codetldr_analysis codetldr_query
          nlohmann_json::nlohmann_json spdlog::spdlog CLI11::CLI11 efsw-static Threads::Threads)
 
-if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
-  target_link_libraries(codetldr_daemon PUBLIC codetldr_embedding)
-endif()
-
 add_library(codetldr_query
   src/query/search_engine.cpp
   src/query/context_builder.cpp
@@ -108,7 +85,7 @@ target_link_libraries(codetldr_query
 add_executable(codetldr-daemon src/daemon/main.cpp)
 target_link_libraries(codetldr-daemon PRIVATE codetldr_daemon)
 
-add_executable(codetldr src/cli/main.cpp src/cli/search_cmd.cpp src/cli/init_cmd.cpp src/cli/model_cmd.cpp)
+add_executable(codetldr src/cli/main.cpp src/cli/search_cmd.cpp src/cli/init_cmd.cpp)
 target_link_libraries(codetldr PRIVATE codetldr_daemon)
 
 add_executable(codetldr-mcp src/mcp/main.cpp)
@@ -198,30 +175,12 @@ add_test(NAME cli_init COMMAND test_cli_init)
 
 add_executable(test_semantic_search tests/test_semantic_search.cpp)
 if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
-  target_link_libraries(test_semantic_search PRIVATE
-    codetldr_daemon codetldr_query codetldr_foundation codetldr_embedding codetldr_analysis)
+  target_link_libraries(test_semantic_search PRIVATE codetldr_embedding)
+  target_compile_definitions(test_semantic_search PRIVATE CODETLDR_ENABLE_SEMANTIC_SEARCH)
 else()
-  target_link_libraries(test_semantic_search PRIVATE
-    codetldr_daemon codetldr_query codetldr_foundation codetldr_analysis)
+  target_link_libraries(test_semantic_search PRIVATE codetldr_foundation)
 endif()
 add_test(NAME semantic_search COMMAND test_semantic_search)
-
-add_executable(test_model_download tests/test_model_download.cpp)
-target_include_directories(test_model_download PRIVATE src)
-target_link_libraries(test_model_download PRIVATE codetldr_foundation)
-add_test(NAME model_download COMMAND test_model_download)
-
-# test_model_registry — registry lookup, FAISS path naming, dim values (header-only, no ORT dep)
-add_executable(test_model_registry tests/test_model_registry.cpp)
-target_include_directories(test_model_registry PRIVATE src)
-target_link_libraries(test_model_registry PRIVATE codetldr_foundation)
-add_test(NAME model_registry COMMAND test_model_registry)
-
-# test_model_cmd — model list formatting, config write behavior (header-only, no ORT dep)
-add_executable(test_model_cmd tests/test_model_cmd.cpp)
-target_include_directories(test_model_cmd PRIVATE src)
-target_link_libraries(test_model_cmd PRIVATE codetldr_foundation)
-add_test(NAME model_cmd COMMAND test_model_cmd)
 
 add_executable(test_mcp_provider tests/test_mcp_provider.cpp)
 target_link_libraries(test_mcp_provider PRIVATE nlohmann_json::nlohmann_json)

@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 
 // ---------------------------------------------------------------------------
 // Helper: make_tools_list_response
-// Build all 9 MCP tool definitions with inputSchema and wrap in JSON-RPC envelope.
+// Build all 8 MCP tool definitions with inputSchema and wrap in JSON-RPC envelope.
 // ---------------------------------------------------------------------------
 static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
     nlohmann::json tools = nlohmann::json::array();
@@ -35,6 +35,7 @@ static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
             {"properties", {
                 {"query", {{"type","string"},{"description","Symbol name or partial name to search for"}}},
                 {"kind",  {{"type","string"},{"description","Filter by symbol kind: function, class, method, struct, enum (optional)"}}},
+                {"lang",  {{"type","string"},{"description","Filter by programming language (e.g. cpp, python). Optional."}}},
                 {"limit", {{"type","integer"},{"description","Maximum results (default 20)"}}}
             }},
             {"required", nlohmann::json::array({"query"})}
@@ -48,6 +49,7 @@ static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
             {"type", "object"},
             {"properties", {
                 {"query", {{"type","string"},{"description","Search terms"}}},
+                {"lang",  {{"type","string"},{"description","Filter by programming language (e.g. cpp, python). Optional."}}},
                 {"limit", {{"type","integer"},{"description","Maximum results (default 20)"}}}
             }},
             {"required", nlohmann::json::array({"query"})}
@@ -95,6 +97,20 @@ static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
     });
 
     tools.push_back({
+        {"name", "semantic_search"},
+        {"description", "Semantic similarity search over indexed symbols using FAISS vector index. Finds conceptually related code even without exact keyword matches. Requires semantic indexing to be enabled."},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"query", {{"type","string"},{"description","Natural language or code description to search for"}}},
+                {"lang",  {{"type","string"},{"description","Filter by programming language (e.g. cpp, python). Optional."}}},
+                {"limit", {{"type","integer"},{"description","Maximum results (default 10)"}}}
+            }},
+            {"required", nlohmann::json::array({"query"})}
+        }}
+    });
+
+    tools.push_back({
         {"name", "get_project_overview"},
         {"description", "Get a high-level overview of the project: language breakdown, file count, top-level symbols by language, indexing status. Use as first call to orient in an unfamiliar codebase."},
         {"inputSchema", {
@@ -129,22 +145,6 @@ static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
         }}
     });
 
-    tools.push_back({
-        {"name", "semantic_search"},
-        {"description", "Semantic similarity search over indexed code using embeddings. "
-                        "Finds conceptually related functions by meaning, not just keywords. "
-                        "Requires model installation via 'codetldr model download'. "
-                        "Returns ranked results with name, kind, file_path, line_start, and similarity score."},
-        {"inputSchema", {
-            {"type", "object"},
-            {"properties", {
-                {"query", {{"type","string"},{"description","Natural language or code query"}}},
-                {"limit", {{"type","integer"},{"description","Maximum results (default 10)"}}}
-            }},
-            {"required", nlohmann::json::array({"query"})}
-        }}
-    });
-
     return nlohmann::json{
         {"jsonrpc", "2.0"},
         {"id",      id},
@@ -176,6 +176,8 @@ static nlohmann::json dispatch_tool_call(const std::string& tool_name,
             daemon_resp = client.call("search_symbols", arguments);
         } else if (tool_name == "search_text") {
             daemon_resp = client.call("search_text", arguments);
+        } else if (tool_name == "semantic_search") {
+            daemon_resp = client.call("semantic_search", arguments);
         } else if (tool_name == "get_file_summary") {
             daemon_resp = client.call("get_file_summary", arguments);
         } else if (tool_name == "get_function_detail") {
@@ -188,8 +190,6 @@ static nlohmann::json dispatch_tool_call(const std::string& tool_name,
             daemon_resp = client.call("get_control_flow", arguments);
         } else if (tool_name == "get_data_flow") {
             daemon_resp = client.call("get_data_flow", arguments);
-        } else if (tool_name == "semantic_search") {
-            daemon_resp = client.call("semantic_search", arguments);
         } else {
             return {
                 {"content", {{{"type","text"},{"text","Unknown tool: " + tool_name}}}},

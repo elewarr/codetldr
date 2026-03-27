@@ -1,0 +1,14 @@
+# Target labels
+ ts_typescript-populate
+# Source files and their labels
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_typescript-subbuild/CMakeFiles/ts_typescript-populate
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_typescript-subbuild/CMakeFiles/ts_typescript-populate.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_typescript-subbuild/CMakeFiles/ts_typescript-populate-complete.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_typescript-subbuild/ts_typescript-populate-prefix/src/ts_typescript-populate-stamp/ts_typescript-populate-build.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_typescript-subbuild/ts_typescript-populate-prefix/src/ts_typescript-populate-stamp/ts_typescript-populate-configure.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_typescript-subbuild/ts_typescript-populate-prefix/src/ts_typescript-populate-stamp/ts_typescript-populate-download.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_typescript-subbuild/ts_typescript-populate-prefix/src/ts_typescript-populate-stamp/ts_typescript-populate-install.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_typescript-subbuild/ts_typescript-populate-prefix/src/ts_typescript-populate-stamp/ts_typescript-populate-mkdir.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_typescript-subbuild/ts_typescript-populate-prefix/src/ts_typescript-populate-stamp/ts_typescript-populate-patch.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_typescript-subbuild/ts_typescript-populate-prefix/src/ts_typescript-populate-stamp/ts_typescript-populate-test.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_typescript-subbuild/ts_typescript-populate-prefix/src/ts_typescript-populate-stamp/ts_typescript-populate-update.rule

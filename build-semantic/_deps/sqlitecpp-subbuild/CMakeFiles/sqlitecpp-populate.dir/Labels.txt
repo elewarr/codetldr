@@ -1,0 +1,14 @@
+# Target labels
+ sqlitecpp-populate
+# Source files and their labels
+/Users/krle/workspace/mcp/code/build-semantic/_deps/sqlitecpp-subbuild/CMakeFiles/sqlitecpp-populate
+/Users/krle/workspace/mcp/code/build-semantic/_deps/sqlitecpp-subbuild/CMakeFiles/sqlitecpp-populate.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/sqlitecpp-subbuild/CMakeFiles/sqlitecpp-populate-complete.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/sqlitecpp-subbuild/sqlitecpp-populate-prefix/src/sqlitecpp-populate-stamp/sqlitecpp-populate-build.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/sqlitecpp-subbuild/sqlitecpp-populate-prefix/src/sqlitecpp-populate-stamp/sqlitecpp-populate-configure.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/sqlitecpp-subbuild/sqlitecpp-populate-prefix/src/sqlitecpp-populate-stamp/sqlitecpp-populate-download.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/sqlitecpp-subbuild/sqlitecpp-populate-prefix/src/sqlitecpp-populate-stamp/sqlitecpp-populate-install.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/sqlitecpp-subbuild/sqlitecpp-populate-prefix/src/sqlitecpp-populate-stamp/sqlitecpp-populate-mkdir.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/sqlitecpp-subbuild/sqlitecpp-populate-prefix/src/sqlitecpp-populate-stamp/sqlitecpp-populate-patch.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/sqlitecpp-subbuild/sqlitecpp-populate-prefix/src/sqlitecpp-populate-stamp/sqlitecpp-populate-test.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/sqlitecpp-subbuild/sqlitecpp-populate-prefix/src/sqlitecpp-populate-stamp/sqlitecpp-populate-update.rule

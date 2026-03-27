@@ -1,0 +1,14 @@
+# Target labels
+ ts_python-populate
+# Source files and their labels
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/CMakeFiles/ts_python-populate
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/CMakeFiles/ts_python-populate.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/CMakeFiles/ts_python-populate-complete.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-build.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-configure.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-download.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-install.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-mkdir.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-patch.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-test.rule
+/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-update.rule

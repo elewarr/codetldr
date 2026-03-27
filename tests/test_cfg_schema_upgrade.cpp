@@ -111,7 +111,7 @@ int main() {
         assert_true(has_column(cols, "lhs"),         "dfg_edges.lhs missing");
         assert_true(has_column(cols, "rhs_snippet"), "dfg_edges.rhs_snippet missing");
         assert_true(has_column(cols, "line"),        "dfg_edges.line missing");
-        std::cout << "PASS: dfg_edges table exists after full v4->v8 migration chain\n";
+        std::cout << "PASS: dfg_edges table exists after full v4->v6 migration chain\n";
     }
 
     // Cleanup
