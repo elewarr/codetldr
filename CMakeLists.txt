@@ -71,15 +71,22 @@ add_library(codetldr_daemon
 target_include_directories(codetldr_daemon PUBLIC src)
 target_link_libraries(codetldr_daemon
   PUBLIC codetldr_foundation codetldr_analysis codetldr_query
-         nlohmann_json::nlohmann_json spdlog::spdlog CLI11::CLI11 efsw-static Threads::Threads)
+         nlohmann_json::nlohmann_json spdlog::spdlog CLI11::CLI11 tomlplusplus::tomlplusplus
+         efsw-static Threads::Threads)
 
 add_library(codetldr_query
   src/query/search_engine.cpp
   src/query/context_builder.cpp
+  src/query/hybrid_search_engine.cpp
 )
 target_include_directories(codetldr_query PUBLIC src)
 target_link_libraries(codetldr_query
   PUBLIC codetldr_foundation nlohmann_json::nlohmann_json)
+
+if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
+  target_link_libraries(codetldr_query PUBLIC codetldr_embedding)
+  target_compile_definitions(codetldr_query PUBLIC CODETLDR_ENABLE_SEMANTIC_SEARCH)
+endif()
 
 add_executable(codetldr-daemon src/daemon/main.cpp)
 target_link_libraries(codetldr-daemon PRIVATE codetldr_daemon)

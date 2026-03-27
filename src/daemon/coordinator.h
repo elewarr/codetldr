@@ -2,6 +2,7 @@
 #include "daemon/ipc_server.h"
 #include "daemon/request_router.h"
 #include "daemon/status.h"
+#include "query/hybrid_search_engine.h"
 #include "query/search_engine.h"
 #include "watcher/file_watcher.h"
 #include "watcher/ignore_filter.h"
@@ -40,11 +41,13 @@ public:
     // registry:       initialized LanguageRegistry reference
     // sock_path:      full path to daemon.sock
     // idle_timeout:   auto-shutdown after this much idle time (default 30min)
+    // hybrid_config:  RRF search tuning (parsed from config.toml [search] section)
     Coordinator(const std::filesystem::path& project_root,
                 SQLite::Database& db,
                 const LanguageRegistry& registry,
                 const std::filesystem::path& sock_path,
-                std::chrono::seconds idle_timeout = std::chrono::seconds(1800));
+                std::chrono::seconds idle_timeout = std::chrono::seconds(1800),
+                HybridSearchConfig hybrid_config = {});
 
     ~Coordinator();
 
