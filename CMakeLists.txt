@@ -131,7 +131,7 @@ target_link_libraries(test_cfg_schema_upgrade PRIVATE codetldr_foundation)
 add_test(NAME cfg_schema_upgrade COMMAND test_cfg_schema_upgrade)
 
 add_executable(test_schema_lsp_tables tests/test_schema_lsp_tables.cpp)
-target_link_libraries(test_schema_lsp_tables PRIVATE codetldr_foundation)
+target_link_libraries(test_schema_lsp_tables PRIVATE codetldr_analysis codetldr_foundation)
 add_test(NAME schema_lsp_tables COMMAND test_schema_lsp_tables)
 
 add_executable(test_tree_sitter_parser tests/test_tree_sitter_parser.cpp)

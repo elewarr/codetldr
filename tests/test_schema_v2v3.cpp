@@ -43,10 +43,10 @@ int main() {
     // Open database - runs migrations
     auto db = codetldr::Database::open(db_path);
 
-    // Test: schema version == 7 (migration v7 adds embedded_files table for Phase 22 observability)
-    assert_true(db.schema_version() == 7,
-        "schema_version should be 7 after migrations, got " + std::to_string(db.schema_version()));
-    std::cout << "PASS: schema_version == 7\n";
+    // Test: schema version == 9 (migrations 8+9 add lsp_definitions and lsp_references)
+    assert_true(db.schema_version() == 9,
+        "schema_version should be 9 after migrations, got " + std::to_string(db.schema_version()));
+    std::cout << "PASS: schema_version == 9\n";
 
     // Test: symbols table columns
     {

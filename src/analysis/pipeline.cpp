@@ -4,6 +4,7 @@
 #include "analysis/tree_sitter/extractor.h"
 #include "analysis/tree_sitter/language_registry.h"
 #include "analysis/tree_sitter/parser.h"
+#include "common/sha256.h"
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <filesystem>
 #include <fstream>
@@ -37,17 +38,21 @@ AnalysisResult analyze_file(SQLite::Database& db,
     }
 
     // c. Upsert the file into the `files` table
+    std::string hash = sha256_file(file_path);
     {
         SQLite::Statement upsert_file(db, R"sql(
-            INSERT INTO files (path, language, mtime_ns, indexed_at)
-            VALUES (?, ?, 0, datetime('now'))
+            INSERT INTO files (path, language, mtime_ns, content_hash, indexed_at)
+            VALUES (?, ?, 0, ?, datetime('now'))
             ON CONFLICT(path) DO UPDATE SET
-                language   = excluded.language,
-                mtime_ns   = excluded.mtime_ns,
-                indexed_at = excluded.indexed_at
+                language     = excluded.language,
+                mtime_ns     = excluded.mtime_ns,
+                content_hash = excluded.content_hash,
+                indexed_at   = excluded.indexed_at
         )sql");
         upsert_file.bind(1, file_path.string());
         upsert_file.bind(2, entry->name);
+        if (!hash.empty()) upsert_file.bind(3, hash);
+        else               upsert_file.bind(3);  // NULL if hash fails
         upsert_file.exec();
     }
 
@@ -247,7 +252,7 @@ AnalysisResult analyze_file(SQLite::Database& db,
 
     return {static_cast<int>(symbols.size()), static_cast<int>(calls.size()),
             static_cast<int>(cfg_nodes_vec.size()), static_cast<int>(dfg_edges_vec.size()),
-            true, {}};
+            true, {}, hash};
 }
 
 } // namespace codetldr
