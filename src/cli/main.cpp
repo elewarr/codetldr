@@ -131,6 +131,24 @@ static void print_status(const nlohmann::json& result, bool offline = false) {
     if (offline) {
         std::cout << "(daemon not running — last known state)\n";
     }
+
+    // Display LSP server status (Phase 24)
+    if (result.contains("lsp_servers") && result["lsp_servers"].is_array()) {
+        const auto& servers = result["lsp_servers"];
+        if (!servers.empty()) {
+            std::cout << "\nLSP Servers:\n";
+            for (const auto& srv : servers) {
+                std::string lang  = srv.value("language", "?");
+                std::string state = srv.value("state", "unknown");
+                // Color-code state: green=ready, yellow=starting/indexing/degraded, red=unavailable
+                const char* color = RESET;
+                if (state == "ready") color = GREEN;
+                else if (state == "unavailable") color = RED;
+                else if (state == "starting" || state == "indexing" || state == "degraded") color = YELLOW;
+                std::cout << "  " << lang << ": " << color << state << RESET << "\n";
+            }
+        }
+    }
 }
 
 int main(int argc, char* argv[]) {
