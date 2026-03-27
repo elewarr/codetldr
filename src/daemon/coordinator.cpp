@@ -5,6 +5,7 @@
 #include "embedding/model_manager.h"
 #include "embedding/vector_store.h"
 #include "lsp/lsp_manager.h"
+#include "lsp/lsp_call_graph_resolver.h"
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <spdlog/spdlog.h>
 #include <poll.h>
@@ -302,11 +303,46 @@ void Coordinator::run() {
             for (const auto& path : ready_paths) {
                 spdlog::info("Coordinator: re-indexing {}", path);
                 try {
+                    // Phase 26: Read old content_hash BEFORE analyze_file overwrites it
+                    std::string old_hash;
+                    if (lsp_resolver_) {
+                        try {
+                            SQLite::Statement q(db_,
+                                "SELECT content_hash FROM files WHERE path = ?");
+                            q.bind(1, path);
+                            if (q.executeStep() && !q.getColumn(0).isNull()) {
+                                old_hash = q.getColumn(0).getString();
+                            }
+                        } catch (...) {}
+                    }
+
                     auto result = analyze_file(db_, registry_, std::filesystem::path(path));
                     if (result.success) {
                         spdlog::info("Coordinator: indexed {} ({} symbols, {} calls)",
                                      path, result.symbols_count, result.calls_count);
                         current_status_.files_indexed++;
+
+                        // Phase 26: trigger LSP resolution if content changed
+                        if (lsp_resolver_ && !result.content_hash.empty() &&
+                            (old_hash.empty() || old_hash != result.content_hash)) {
+                            try {
+                                SQLite::Statement q(db_,
+                                    "SELECT id, language FROM files WHERE path = ?");
+                                q.bind(1, path);
+                                if (q.executeStep()) {
+                                    int64_t file_id = q.getColumn(0).getInt64();
+                                    std::string lang = q.getColumn(1).isNull()
+                                        ? "" : q.getColumn(1).getString();
+                                    if (!lang.empty()) {
+                                        lsp_resolver_->resolve_file(
+                                            std::filesystem::path(path), file_id, lang);
+                                    }
+                                }
+                            } catch (const std::exception& ex) {
+                                spdlog::warn("Coordinator: LSP resolve failed for {}: {}",
+                                             path, ex.what());
+                            }
+                        }
                     } else {
                         spdlog::warn("Coordinator: analysis failed for {}: {}", path, result.error);
                     }
@@ -343,6 +379,10 @@ void Coordinator::run() {
     }
 
     shutdown();
+}
+
+void Coordinator::set_lsp_resolver(std::unique_ptr<LspCallGraphResolver> resolver) {
+    lsp_resolver_ = std::move(resolver);
 }
 
 void Coordinator::process_file_events() {
