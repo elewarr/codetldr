@@ -2,6 +2,6 @@
 #include <CLI/CLI.hpp>
 #include <string>
 
-// Register the model subcommand (codetldr model download) on the CLI11 app.
-// project_root_str is the shared --project-root option string (unused for model, but follows convention).
+// Register the model subcommand (codetldr model list|select|download) on the CLI11 app.
+// project_root_str is the shared --project-root option string used by list and select.
 void register_model_cmd(CLI::App& app, std::string& project_root_str);
