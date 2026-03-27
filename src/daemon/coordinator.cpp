@@ -105,7 +105,7 @@ Coordinator::Coordinator(const std::filesystem::path& project_root,
     {
         namespace fs = std::filesystem;
         XdgPaths xdg = resolve_xdg_paths();
-        fs::path cache_dir = xdg.cache_home / "models" / "CodeRankEmbed";
+        fs::path cache_dir = xdg.cache_home / "codetldr" / "models" / "CodeRankEmbed";
         fs::path model_path = cache_dir / "model_quantized.onnx";
         fs::path tokenizer_path = cache_dir / "tokenizer.json";
 
@@ -218,7 +218,7 @@ void Coordinator::run() {
         // Check model fingerprint: if changed or first run, trigger full rebuild
         namespace fs = std::filesystem;
         XdgPaths xdg = resolve_xdg_paths();
-        fs::path model_path = xdg.cache_home / "models" / "CodeRankEmbed" / "model_quantized.onnx";
+        fs::path model_path = xdg.cache_home / "codetldr" / "models" / "CodeRankEmbed" / "model_quantized.onnx";
         std::string current_fp = EmbeddingWorker::compute_model_fingerprint(model_path);
         if (!current_fp.empty()) {
             std::string stored_fp;

@@ -40,6 +40,14 @@ if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
   add_executable(test_embedding_worker tests/test_embedding_worker.cpp)
   target_link_libraries(test_embedding_worker PRIVATE codetldr_embedding codetldr_analysis)
   add_test(NAME embedding_worker COMMAND test_embedding_worker)
+
+  add_executable(test_embedding_pipeline tests/test_embedding_pipeline.cpp)
+  target_link_libraries(test_embedding_pipeline PRIVATE codetldr_embedding)
+  add_test(NAME embedding_pipeline COMMAND test_embedding_pipeline)
+
+  add_executable(test_chunk_extractor tests/test_chunk_extractor.cpp)
+  target_link_libraries(test_chunk_extractor PRIVATE codetldr_embedding)
+  add_test(NAME chunk_extractor COMMAND test_chunk_extractor)
 endif()
 
 add_library(codetldr_foundation
