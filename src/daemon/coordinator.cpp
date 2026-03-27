@@ -393,13 +393,14 @@ void Coordinator::request_stop() {
 nlohmann::json Coordinator::get_language_support() const {
     nlohmann::json arr = nlohmann::json::array();
     for (const auto& lang : registry_.language_names()) {
+        const auto* le = registry_.for_language(lang);
         nlohmann::json entry;
-        entry["language"]     = lang;
-        entry["l1_ast"]       = true;   // Tree-sitter L1 always available
-        entry["l2_call_graph"] = true;  // Approximate call graph via Tree-sitter
-        entry["l3_cfg"]       = false;  // Control flow graph not yet implemented
-        entry["l4_dfg"]       = false;  // Data flow graph not yet implemented
-        entry["l5_pdg"]       = false;  // Program dependency graph not yet implemented
+        entry["language"]      = lang;
+        entry["l1_ast"]        = true;   // Tree-sitter L1 always available
+        entry["l2_call_graph"] = true;   // Approximate call graph via Tree-sitter
+        entry["l3_cfg"]        = (le && le->cfg_query != nullptr);
+        entry["l4_dfg"]        = (le && le->dfg_query != nullptr);
+        entry["l5_pdg"]        = false;  // Program dependency graph not yet implemented
         arr.push_back(std::move(entry));
     }
     return arr;
