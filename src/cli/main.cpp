@@ -21,6 +21,13 @@
 
 namespace fs = std::filesystem;
 
+// ANSI color helpers
+static const char* GREEN  = "\033[32m";
+static const char* YELLOW = "\033[33m";
+static const char* RED    = "\033[31m";
+static const char* BOLD   = "\033[1m";
+static const char* RESET  = "\033[0m";
+
 // Format uptime_seconds into "Xh Ym Zs" or "Xm Zs"
 static std::string format_uptime(int seconds) {
     if (seconds < 0) seconds = 0;
@@ -32,6 +39,73 @@ static std::string format_uptime(int seconds) {
     if (h > 0 || m > 0) result += std::to_string(m) + "m ";
     result += std::to_string(s) + "s";
     return result;
+}
+
+// Print embedding pipeline stats with color-coded health indicators
+static void print_stats(const nlohmann::json& result) {
+    // Print warnings first (OBS-03, OBS-04)
+    std::string health   = result.value("health", "ok");
+    std::string degraded_str = result.contains("degraded") && result["degraded"].is_string()
+                             ? result["degraded"].get<std::string>() : "";
+
+    if (!degraded_str.empty()) {
+        std::cout << RED << BOLD << "[WARNING] " << RESET << RED << degraded_str << RESET << "\n\n";
+    }
+
+    // Header
+    std::cout << BOLD << "Embedding Pipeline Stats\n" << RESET;
+    std::cout << std::string(40, '-') << "\n";
+
+    // Model
+    std::string model_status = result.value("model_status", "unknown");
+    const char* model_color = (model_status == "loaded") ? GREEN : YELLOW;
+    std::cout << "Model:        " << model_color << model_status << RESET << "\n";
+
+    // Health indicator
+    const char* health_color = (health == "ok") ? GREEN : RED;
+    std::cout << "Health:       " << health_color << health << RESET << "\n";
+
+    // Latency
+    size_t sample_count = result.value("sample_count", static_cast<size_t>(0));
+    if (sample_count > 0) {
+        double p50 = result.value("latency_p50_ms", 0.0);
+        double p95 = result.value("latency_p95_ms", 0.0);
+        double p99 = result.value("latency_p99_ms", 0.0);
+        double thr = result.value("throughput_chunks_per_sec", 0.0);
+
+        // Color latency: green <10ms, yellow 10-20ms, red >20ms
+        auto latency_color = [](double ms) -> const char* {
+            if (ms < 10.0) return GREEN;
+            if (ms < 20.0) return YELLOW;
+            return RED;
+        };
+
+        std::cout << "Latency p50:  " << latency_color(p50)
+                  << p50 << "ms" << RESET << "\n";
+        std::cout << "Latency p95:  " << latency_color(p95)
+                  << p95 << "ms" << RESET << "\n";
+        std::cout << "Latency p99:  " << latency_color(p99)
+                  << p99 << "ms" << RESET << "\n";
+        std::cout << "Throughput:   " << thr << " chunks/sec\n";
+        std::cout << "(n=" << sample_count << " samples)\n";
+    } else {
+        std::cout << YELLOW << "Latency:      no data yet\n" << RESET;
+    }
+
+    // Queue
+    uint64_t queue = result.value("queue_depth", static_cast<uint64_t>(0));
+    const char* queue_color = (queue == 0) ? GREEN : (queue < 100 ? YELLOW : RED);
+    std::cout << "Queue depth:  " << queue_color << queue << RESET << " pending\n";
+
+    // Index sizes
+    int64_t faiss  = result.value("faiss_vector_count", static_cast<int64_t>(0));
+    int64_t sqlite = result.value("sqlite_embedded_count", static_cast<int64_t>(0));
+    std::cout << "FAISS index:  " << faiss  << " vectors\n";
+    std::cout << "SQLite index: " << sqlite << " symbols embedded\n";
+
+    // Total
+    uint64_t total = result.value("chunks_embedded_total", static_cast<uint64_t>(0));
+    std::cout << "Total chunks: " << total << " embedded (all time)\n";
 }
 
 // Print daemon status in human-readable format
@@ -209,8 +283,10 @@ int main(int argc, char* argv[]) {
     auto* status_cmd = app.add_subcommand("status", "Show daemon status");
     status_cmd->add_option("--project-root", project_root_str,
                            "Path to the project root (default: auto-detect git root or cwd)");
-    bool status_json = false;
-    status_cmd->add_flag("--json", status_json, "Output as JSON");
+    bool status_json  = false;
+    bool status_stats = false;
+    status_cmd->add_flag("--json",  status_json,  "Output as JSON");
+    status_cmd->add_flag("--stats", status_stats, "Output embedding pipeline metrics and health indicators");
 
     status_cmd->callback([&]() {
         fs::path project_root = resolve_project_root();
@@ -224,7 +300,17 @@ int main(int argc, char* argv[]) {
             try {
                 auto response = client.call("get_status");
                 if (response.contains("result")) {
-                    if (status_json) {
+                    if (status_stats) {
+                        // Fetch embedding stats from daemon
+                        auto stats_resp = client.call("get_embedding_stats");
+                        print_status(response["result"]);
+                        std::cout << "\n";
+                        if (stats_resp.contains("result")) {
+                            print_stats(stats_resp["result"]);
+                        } else {
+                            std::cout << "Embedding stats unavailable\n";
+                        }
+                    } else if (status_json) {
                         std::cout << response["result"].dump(2) << "\n";
                     } else {
                         print_status(response["result"]);
