@@ -99,7 +99,8 @@ void register_search_cmd(CLI::App& app, std::string& project_root_str) {
                     std::string name = item.value("name", "?");
                     std::string kind = item.value("kind", "");
                     std::string file = item.value("file_path", "");
-                    int line = item.value("line", 0);
+                    int line = item.value("line_start", 0);
+                    std::string prov = item.value("provenance", "");
 
                     if (!kind.empty()) {
                         std::cout << name << " (" << kind << ")";
@@ -111,6 +112,9 @@ void register_search_cmd(CLI::App& app, std::string& project_root_str) {
                         if (line > 0) {
                             std::cout << ":" << line;
                         }
+                    }
+                    if (!prov.empty()) {
+                        std::cout << " [" << prov << "]";
                     }
                     std::cout << "\n";
                 }
