@@ -4,3 +4,8 @@ cmake-build-debug/
 
 .DS_Store
 compile_commands.json
+.idea/
+.claude/worktrees/
+.claude/settings.json
+.claude/package.json
+.claude/gsd-file-manifest.json
