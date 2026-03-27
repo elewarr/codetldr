@@ -104,6 +104,7 @@ add_library(codetldr_lsp STATIC
   src/lsp/lsp_transport.cpp
   src/lsp/lsp_manager.cpp
   src/lsp/lsp_call_graph_resolver.cpp
+  src/lsp/lsp_call_hierarchy_resolver.cpp
 )
 target_include_directories(codetldr_lsp PUBLIC src)
 target_link_libraries(codetldr_lsp
@@ -256,3 +257,7 @@ add_test(NAME lsp_manager COMMAND test_lsp_manager)
 add_executable(test_lsp_handshake tests/test_lsp_handshake.cpp)
 target_link_libraries(test_lsp_handshake PRIVATE codetldr_lsp)
 add_test(NAME lsp_handshake COMMAND test_lsp_handshake)
+
+add_executable(test_lsp_call_hierarchy tests/test_lsp_call_hierarchy.cpp)
+target_link_libraries(test_lsp_call_hierarchy PRIVATE codetldr_lsp codetldr_foundation)
+add_test(NAME lsp_call_hierarchy COMMAND test_lsp_call_hierarchy)
