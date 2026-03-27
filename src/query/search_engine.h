@@ -6,7 +6,7 @@
 
 namespace codetldr {
 
-/// A single ranked search result from the FTS5 index.
+/// A single ranked search result from the FTS5 index or hybrid search engine.
 struct SearchResult {
     int64_t     symbol_id;
     std::string name;
@@ -16,6 +16,7 @@ struct SearchResult {
     std::string file_path;
     int         line_start;
     double      rank;
+    std::string provenance;  // "fts5", "vector", or "both"; empty for legacy FTS5-only path
 };
 
 /// Full-text search engine over the symbols_fts FTS5 virtual table.

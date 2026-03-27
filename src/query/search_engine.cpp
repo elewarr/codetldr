@@ -104,6 +104,7 @@ std::vector<SearchResult> SearchEngine::search_symbols(const std::string& query,
                 r.file_path    = stmt.getColumn(5).getText();
                 r.line_start   = stmt.getColumn(6).getInt();
                 r.rank         = stmt.getColumn(7).getDouble();
+                r.provenance   = "fts5";
                 results.push_back(std::move(r));
             }
         } else if (!fts_query.empty()) {
@@ -130,6 +131,7 @@ std::vector<SearchResult> SearchEngine::search_symbols(const std::string& query,
                 r.file_path    = stmt.getColumn(5).getText();
                 r.line_start   = stmt.getColumn(6).getInt();
                 r.rank         = stmt.getColumn(7).getDouble();
+                r.provenance   = "fts5";
                 results.push_back(std::move(r));
             }
         } else {
@@ -154,6 +156,7 @@ std::vector<SearchResult> SearchEngine::search_symbols(const std::string& query,
                 r.file_path    = stmt.getColumn(5).getText();
                 r.line_start   = stmt.getColumn(6).getInt();
                 r.rank         = stmt.getColumn(7).getDouble();
+                r.provenance   = "fts5";
                 results.push_back(std::move(r));
             }
         }
