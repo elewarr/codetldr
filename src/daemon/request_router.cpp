@@ -1,19 +1,38 @@
 #include "daemon/request_router.h"
 #include "daemon/coordinator.h"
-#include "query/search_engine.h"
+#include "query/hybrid_search_engine.h"
 #include "query/context_builder.h"
 #include <unistd.h>
 
 namespace codetldr {
 
+// Legacy constructor: derive db_path from the open SQLite connection's filename.
+// HybridSearchEngine opens its own read-only connection from the same path.
+// When db is in-memory (":memory:"), HybridSearchEngine falls back to FTS5 via db.
 RequestRouter::RequestRouter(Coordinator& coordinator, SQLite::Database& db)
     : coordinator_(coordinator)
     , db_(db)
-    , search_engine_(std::make_unique<SearchEngine>(db))
+    , hybrid_engine_(std::make_unique<HybridSearchEngine>(
+          std::filesystem::path(db.getFilename()),
+          /*model=*/nullptr,
+          /*store=*/nullptr))
     , context_builder_(std::make_unique<ContextBuilder>(db))
 {}
 
-// Destructor defined here where SearchEngine and ContextBuilder are complete types.
+// Full constructor with hybrid search support.
+RequestRouter::RequestRouter(Coordinator& coordinator,
+                              SQLite::Database& db,
+                              const std::filesystem::path& db_path,
+                              ModelManager* model,
+                              VectorStore* store,
+                              HybridSearchConfig hybrid_config)
+    : coordinator_(coordinator)
+    , db_(db)
+    , hybrid_engine_(std::make_unique<HybridSearchEngine>(db_path, model, store, hybrid_config))
+    , context_builder_(std::make_unique<ContextBuilder>(db))
+{}
+
+// Destructor defined here where complete types are available.
 RequestRouter::~RequestRouter() = default;
 
 nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
@@ -50,10 +69,11 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
     } else if (method == "search_text") {
         try {
             const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
-            std::string query = params.value("query", "");
+            std::string query    = params.value("query", "");
+            std::string language = params.value("language", "");
             int limit = params.value("limit", 20);
 
-            auto results = search_engine_->search_text(query, limit);
+            auto results = hybrid_engine_->search_text(query, language, limit);
 
             nlohmann::json arr = nlohmann::json::array();
             for (const auto& r : results) {
@@ -66,6 +86,7 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
                 item["file_path"]     = r.file_path;
                 item["line_start"]    = r.line_start;
                 item["rank"]          = r.rank;
+                item["provenance"]    = r.provenance;
                 arr.push_back(std::move(item));
             }
             response["result"] = std::move(arr);
@@ -79,11 +100,12 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
     } else if (method == "search_symbols") {
         try {
             const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
-            std::string query = params.value("query", "");
-            std::string kind  = params.value("kind", "");
+            std::string query    = params.value("query", "");
+            std::string kind     = params.value("kind", "");
+            std::string language = params.value("language", "");
             int limit = params.value("limit", 20);
 
-            auto results = search_engine_->search_symbols(query, kind, /*language=*/"", limit);
+            auto results = hybrid_engine_->search_symbols(query, kind, language, limit);
 
             nlohmann::json arr = nlohmann::json::array();
             for (const auto& r : results) {
@@ -96,6 +118,7 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
                 item["file_path"]     = r.file_path;
                 item["line_start"]    = r.line_start;
                 item["rank"]          = r.rank;
+                item["provenance"]    = r.provenance;
                 arr.push_back(std::move(item));
             }
             response["result"] = std::move(arr);
