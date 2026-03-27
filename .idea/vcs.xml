@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/cli11-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/efsw-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/spdlog-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/sqlitecpp-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/sqlitecpp-src/googletest" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/tree_sitter-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/ts_c-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/ts_cpp-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/ts_java-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/ts_javascript-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/ts_kotlin-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/ts_objc-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/ts_python-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/ts_rust-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/ts_swift-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-verify/_deps/ts_typescript-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/cli11-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/efsw-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/spdlog-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/sqlitecpp-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/sqlitecpp-src/googletest" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/tree_sitter-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/ts_c-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/ts_cpp-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/ts_java-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/ts_javascript-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/ts_kotlin-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/ts_objc-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/ts_python-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/ts_rust-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/ts_swift-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build/_deps/ts_typescript-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmake-build-debug/_deps/cli11-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmake-build-debug/_deps/efsw-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmake-build-debug/_deps/spdlog-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmake-build-debug/_deps/sqlitecpp-src" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/cmake-build-debug/_deps/sqlitecpp-src/googletest" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/tokenizers-cpp" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/tokenizers-cpp/msgpack" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/tokenizers-cpp/sentencepiece" vcs="Git" />
+  </component>
+</project>
