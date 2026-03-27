@@ -12,10 +12,11 @@ namespace codetldr {
 struct AnalysisResult {
     int symbols_count;
     int calls_count;
-    int cfg_count;      // number of CFG nodes extracted
-    int dfg_count;      // number of DFG edges extracted
+    int cfg_count;        // number of CFG nodes extracted
+    int dfg_count;        // number of DFG edges extracted
     bool success;
-    std::string error;  // empty if success
+    std::string error;    // empty if success
+    std::string content_hash;  // SHA-256 hex, empty on failure
 };
 
 // Analyze a single source file: parse with Tree-sitter, extract symbols and calls,

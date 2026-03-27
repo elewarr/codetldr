@@ -77,12 +77,12 @@ int main() {
     }
     // raw_db goes out of scope here — file closed before Database::open()
 
-    // === Test 1: Database::open() upgrades v4 -> v7 transparently ===
+    // === Test 1: Database::open() upgrades v4 -> v9 transparently ===
     auto db = codetldr::Database::open(db_path);
 
-    assert_true(db.schema_version() == 7,
-        "schema_version should be 7 after upgrade, got " + std::to_string(db.schema_version()));
-    std::cout << "PASS: schema_version() == 7 after v4 -> v7 upgrade\n";
+    assert_true(db.schema_version() == 9,
+        "schema_version should be 9 after upgrade, got " + std::to_string(db.schema_version()));
+    std::cout << "PASS: schema_version() == 9 after v4 -> v9 upgrade\n";
 
     // === Test 2: cfg_nodes table exists with all 7 columns ===
     {

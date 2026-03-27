@@ -1,7 +1,10 @@
 #include "storage/database.h"
 #include "storage/schema.h"
+#include "analysis/pipeline.h"
+#include "analysis/tree_sitter/language_registry.h"
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -180,6 +183,42 @@ int main() {
                 "lsp_definitions should be cascade-deleted when caller_file is deleted");
         }
         std::cout << "PASS: lsp_definitions CASCADE deletes when caller_file deleted\n";
+    }
+
+    // === Test 6: analyze_file() populates content_hash in files table ===
+    {
+        // Write a temp C++ source file
+        fs::path src_file = tmp_dir / "hello.cpp";
+        {
+            std::ofstream f(src_file);
+            f << "int main() { return 0; }\n";
+        }
+
+        // Open a fresh in-memory-style DB in the tmp_dir for pipeline test
+        fs::path pipeline_db_path = tmp_dir / "pipeline_test.sqlite";
+        auto pipeline_db = codetldr::Database::open(pipeline_db_path);
+
+        codetldr::LanguageRegistry registry;
+        registry.initialize();
+        auto result = codetldr::analyze_file(pipeline_db.raw(), registry, src_file);
+        assert_true(result.success, "analyze_file should succeed on valid C++ file: " + result.error);
+
+        // Query content_hash from files table
+        SQLite::Statement q(pipeline_db.raw(),
+            "SELECT content_hash FROM files WHERE path = ?");
+        q.bind(1, src_file.string());
+        assert_true(q.executeStep(), "files table should contain analyzed file");
+        std::string stored_hash = q.getColumn(0).getString();
+
+        assert_true(!stored_hash.empty(), "content_hash should not be empty after analyze_file");
+        assert_true(stored_hash.size() == 64,
+            "content_hash should be 64 hex chars, got " + std::to_string(stored_hash.size()));
+
+        // Verify result.content_hash matches stored hash
+        assert_true(result.content_hash == stored_hash,
+            "AnalysisResult.content_hash should match stored hash");
+
+        std::cout << "PASS: content_hash is a 64-char hex string in files table after analyze_file\n";
     }
 
     // Cleanup
