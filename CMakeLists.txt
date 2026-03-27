@@ -243,3 +243,7 @@ add_test(NAME lsp_transport COMMAND test_lsp_transport)
 add_executable(test_lsp_manager tests/test_lsp_manager.cpp)
 target_link_libraries(test_lsp_manager PRIVATE codetldr_lsp)
 add_test(NAME lsp_manager COMMAND test_lsp_manager)
+
+add_executable(test_lsp_handshake tests/test_lsp_handshake.cpp)
+target_link_libraries(test_lsp_handshake PRIVATE codetldr_lsp)
+add_test(NAME lsp_handshake COMMAND test_lsp_handshake)
