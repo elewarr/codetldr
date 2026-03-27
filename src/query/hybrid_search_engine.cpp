@@ -145,20 +145,33 @@ HybridSearchResult HybridSearchEngine::run_hybrid(
         }
     }
 
+    HybridSearchResult hybrid_result;
+    hybrid_result.results = rrf_merge(fts5_results, faiss_results, symbol_map,
+                                       effective_limit, config_.rrf_k);
+    hybrid_result.search_mode = "hybrid";
+    return hybrid_result;
+}
+
+std::vector<SearchResult> rrf_merge(
+    const std::vector<SearchResult>& fts5_results,
+    const std::vector<std::pair<int64_t, float>>& faiss_results,
+    const std::unordered_map<int64_t, SearchResult>& symbol_lookup,
+    int limit,
+    int rrf_k)
+{
     // Accumulate RRF scores and provenance
-    const int k = config_.rrf_k;
     std::unordered_map<int64_t, double> scores;
     std::unordered_map<int64_t, std::string> provenance;
 
     for (int i = 0; i < static_cast<int>(fts5_results.size()); ++i) {
         int64_t id = fts5_results[i].symbol_id;
-        scores[id] += 1.0 / (k + i + 1);
+        scores[id] += 1.0 / (rrf_k + i + 1);
         provenance[id] = "fts5";
     }
     for (int i = 0; i < static_cast<int>(faiss_results.size()); ++i) {
         int64_t id = faiss_results[i].first;
         if (id < 0) continue;
-        scores[id] += 1.0 / (k + i + 1);
+        scores[id] += 1.0 / (rrf_k + i + 1);
         auto it = provenance.find(id);
         if (it != provenance.end() && it->second == "fts5") {
             it->second = "both";
@@ -173,21 +186,17 @@ HybridSearchResult HybridSearchEngine::run_hybrid(
               [](const auto& a, const auto& b) { return a.second > b.second; });
 
     std::vector<SearchResult> results;
-    results.reserve(static_cast<size_t>(std::min(static_cast<int>(ranked.size()), effective_limit)));
-    for (int i = 0; i < effective_limit && i < static_cast<int>(ranked.size()); ++i) {
+    results.reserve(static_cast<size_t>(std::min(static_cast<int>(ranked.size()), limit)));
+    for (int i = 0; i < limit && i < static_cast<int>(ranked.size()); ++i) {
         int64_t id = ranked[i].first;
-        auto it = symbol_map.find(id);
-        if (it == symbol_map.end()) continue;
+        auto it = symbol_lookup.find(id);
+        if (it == symbol_lookup.end()) continue;
         SearchResult r = it->second;
         r.rank = ranked[i].second;
         r.provenance = provenance.at(id);
         results.push_back(std::move(r));
     }
-
-    HybridSearchResult hybrid_result;
-    hybrid_result.results = std::move(results);
-    hybrid_result.search_mode = "hybrid";
-    return hybrid_result;
+    return results;
 }
 
 HybridSearchResult HybridSearchEngine::search_text(
