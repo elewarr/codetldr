@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/CMakeFiles/ts_python-populate"
+		},
+		{
+			"file" : "/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/CMakeFiles/ts_python-populate.rule"
+		},
+		{
+			"file" : "/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/CMakeFiles/ts_python-populate-complete.rule"
+		},
+		{
+			"file" : "/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-build.rule"
+		},
+		{
+			"file" : "/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-configure.rule"
+		},
+		{
+			"file" : "/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-download.rule"
+		},
+		{
+			"file" : "/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-install.rule"
+		},
+		{
+			"file" : "/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-mkdir.rule"
+		},
+		{
+			"file" : "/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-patch.rule"
+		},
+		{
+			"file" : "/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-test.rule"
+		},
+		{
+			"file" : "/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/ts_python-populate-prefix/src/ts_python-populate-stamp/ts_python-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"ts_python-populate"
+		],
+		"name" : "ts_python-populate"
+	}
+}

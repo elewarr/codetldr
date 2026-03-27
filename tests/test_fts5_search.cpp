@@ -109,7 +109,7 @@ int main() {
 
     // Test 5: Search with limit=1 returns exactly 1 result
     {
-        auto results = engine.search_text("search", 1);
+        auto results = engine.search_text("search", "", 1);
         assert(results.size() == 1);
         std::cout << "PASS: limit=1 returns exactly 1 result\n";
     }
@@ -264,6 +264,68 @@ int main() {
             assert(!found_old);
             std::cout << "PASS: stale 'old_function' not found after FTS sync\n";
         }
+    }
+
+    // --- Language filter tests ---
+    {
+        // Insert a python file + symbol
+        db.exec("INSERT INTO files(path, language, mtime_ns) VALUES('/test/bar.py', 'python', 0)");
+        int64_t py_file_id = db.getLastInsertRowid();
+        SQLite::Statement ins_py(db,
+            "INSERT INTO symbols(file_id, kind, name, signature, line_start, line_end) "
+            "VALUES (?, 'function', 'python_helper', 'def python_helper()', 1, 5)");
+        ins_py.bind(1, py_file_id);
+        ins_py.exec();
+        db.exec(
+            "INSERT INTO symbols_fts(rowid, name, signature, documentation) "
+            "SELECT id, name, COALESCE(signature,''), '' FROM symbols WHERE file_id = " +
+            std::to_string(py_file_id));
+
+        // Test: lang=cpp returns only cpp symbols (excludes python)
+        auto cpp_results = engine.search_symbols("", "", "cpp");
+        bool no_py_in_cpp = true;
+        for (const auto& r : cpp_results) {
+            if (r.name == "python_helper") { no_py_in_cpp = false; break; }
+        }
+        assert(no_py_in_cpp);
+        std::cout << "PASS: lang=cpp filter excludes python symbols (" << cpp_results.size() << " results)\n";
+
+        // Test: lang=python returns python_helper
+        auto py_results = engine.search_symbols("", "", "python");
+        bool found_py = false;
+        for (const auto& r : py_results) {
+            if (r.name == "python_helper") { found_py = true; break; }
+        }
+        assert(found_py);
+        std::cout << "PASS: lang=python filter returns python symbols\n";
+
+        // Test: unknown lang returns empty
+        auto go_results = engine.search_symbols("", "", "go");
+        assert(go_results.empty());
+        std::cout << "PASS: unknown lang returns empty results\n";
+
+        // Test: query + lang intersection
+        auto qry_results = engine.search_symbols("analyze", "", "cpp");
+        bool all_cpp = true;
+        for (const auto& r : qry_results) {
+            // cpp file has /test/foo.cpp and /test/sync_test.cpp
+            if (r.file_path.find(".cpp") == std::string::npos &&
+                r.file_path.find(".h") == std::string::npos) {
+                all_cpp = false;
+                break;
+            }
+        }
+        assert(all_cpp);
+        std::cout << "PASS: query + lang filter returns intersection (" << qry_results.size() << " results)\n";
+
+        // Test: search_text with lang=python returns only python symbols
+        auto text_py = engine.search_text("python_helper", "python");
+        bool found_py_text = false;
+        for (const auto& r : text_py) {
+            if (r.name == "python_helper") { found_py_text = true; break; }
+        }
+        assert(found_py_text);
+        std::cout << "PASS: search_text lang=python returns python symbols\n";
     }
 
     fs::remove_all(test_dir);

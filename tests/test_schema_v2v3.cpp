@@ -43,7 +43,7 @@ int main() {
     // Open database - runs migrations
     auto db = codetldr::Database::open(db_path);
 
-    // Test: schema version == 8 (v7 adds metadata, v8 adds embedded_files)
+    // Test: schema version == 8 (migration v8 adds idx_files_language index)
     assert_true(db.schema_version() == 8,
         "schema_version should be 8 after migrations, got " + std::to_string(db.schema_version()));
     std::cout << "PASS: schema_version == 8\n";
