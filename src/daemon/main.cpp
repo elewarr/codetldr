@@ -136,6 +136,7 @@ int main(int argc, char* argv[]) {
             spdlog::info("LSP: registered typescript-language-server at {}", tsserver_path);
         }
 
+        lsp_manager.set_project_root(project_root);
         coordinator.set_lsp_manager(&lsp_manager);
 
         coordinator.run();

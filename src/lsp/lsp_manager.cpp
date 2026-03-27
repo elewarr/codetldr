@@ -3,6 +3,7 @@
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <sys/wait.h>
+#include <unistd.h>
 
 namespace codetldr {
 
@@ -91,6 +92,38 @@ LspTransport* LspManager::get_transport(const std::string& language) {
     return nullptr;
 }
 
+void LspManager::set_project_root(const std::filesystem::path& root) {
+    project_root_ = root;
+}
+
+nlohmann::json LspManager::make_initialize_params(const std::string& language,
+                                                    const std::filesystem::path& project_root) {
+    (void)language;  // reserved for language-specific capability tweaks
+    std::string root_uri = "file://" + project_root.string();
+    return {
+        {"processId", static_cast<int>(::getpid())},
+        {"clientInfo", {{"name", "codetldr"}, {"version", "2.0"}}},
+        {"rootUri", root_uri},
+        {"workspaceFolders", {{{"uri", root_uri},
+                               {"name", project_root.filename().string()}}}},
+        {"capabilities", {
+            {"textDocument", {
+                {"synchronization", {
+                    {"didOpen", true},
+                    {"didClose", true},
+                    {"didChange", true}
+                }},
+                {"definition", {{"dynamicRegistration", false}}},
+                {"references", {{"dynamicRegistration", false}}}
+            }},
+            {"workspace", {
+                {"workspaceFolders", true},
+                {"configuration", false}
+            }}
+        }}
+    };
+}
+
 bool LspManager::try_spawn(ServerEntry& entry, const std::string& language) {
     int rc = entry.transport.spawn(entry.config.command, entry.config.args);
     if (rc != 0) {
@@ -104,11 +137,47 @@ bool LspManager::try_spawn(ServerEntry& entry, const std::string& language) {
     }
     spdlog::info("LspManager: spawned LSP server for '{}' (pid={}, stdout_fd={})",
                  language, entry.transport.pid(), fd);
+
+    // Send LSP initialize request immediately after spawn
+    auto params = make_initialize_params(language, project_root_);
+    entry.transport.send_request("initialize", params,
+        [this, language](const nlohmann::json& result, const nlohmann::json& error) {
+            (void)result;
+            auto it = servers_.find(language);
+            if (it == servers_.end()) return;
+            ServerEntry& e = it->second;
+            // Stale callback guard: ignore if we've already moved past kStarting
+            if (e.state != LspServerState::kStarting) return;
+
+            if (!error.is_null()) {
+                spdlog::error("LspManager: initialize failed for '{}': {}", language, error.dump());
+                // Treat as crash for backoff/circuit-breaker logic
+                handle_crash(e, language, Clock::now());
+                return;
+            }
+
+            // Send initialized notification — LSP spec requires this before any requests
+            e.transport.send_notification("initialized", nlohmann::json::object());
+            e.state = LspServerState::kReady;
+            spdlog::info("LspManager: '{}' reached kReady", language);
+
+            // Drain queued requests
+            auto queued = std::move(e.pending_requests);
+            e.pending_requests.clear();
+            for (auto& fn : queued) {
+                fn();
+            }
+        });
+
     return true;
 }
 
 void LspManager::handle_crash(ServerEntry& entry, const std::string& language,
                                Clock::time_point now) {
+    // Clear per-session state so the next spawn gets fresh state
+    entry.opened_uris.clear();
+    entry.pending_requests.clear();
+
     // Add crash time
     entry.crash_times.push_back(now);
 
@@ -266,6 +335,23 @@ void LspManager::check_timeouts() {
             entry.transport.check_timeouts();
         }
     }
+}
+
+bool LspManager::send_when_ready(const std::string& language, std::function<void()> action) {
+    auto it = servers_.find(language);
+    if (it == servers_.end()) return false;
+    ServerEntry& e = it->second;
+    if (e.state == LspServerState::kReady ||
+        e.state == LspServerState::kIndexing ||
+        e.state == LspServerState::kDegraded) {
+        action();
+        return true;
+    }
+    if (e.state == LspServerState::kStarting) {
+        e.pending_requests.push_back(std::move(action));
+        return true;
+    }
+    return false;
 }
 
 } // namespace codetldr
