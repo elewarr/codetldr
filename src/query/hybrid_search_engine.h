@@ -23,6 +23,24 @@ struct HybridSearchResult {
     std::string search_mode;  // "hybrid" or "fts5_only"
 };
 
+/// RRF merge of FTS5 and FAISS results. Exposed for unit testing.
+///
+/// fts5_results: ranked FTS5 hits (already have full SearchResult metadata).
+/// faiss_results: ranked FAISS hits as (symbol_id, distance) pairs.
+/// symbol_lookup: maps symbol_id -> SearchResult for FAISS-only results.
+/// limit: maximum number of results to return.
+/// rrf_k: the RRF k parameter (Cormack et al. 2009), default 60.
+///
+/// Returns fused results sorted by RRF score descending, truncated to limit.
+/// Provenance is set to "fts5" (FTS5-only), "vector" (FAISS-only), or "both".
+/// FAISS entries with symbol_id < 0 are skipped (sentinel values).
+std::vector<SearchResult> rrf_merge(
+    const std::vector<SearchResult>& fts5_results,
+    const std::vector<std::pair<int64_t, float>>& faiss_results,
+    const std::unordered_map<int64_t, SearchResult>& symbol_lookup,
+    int limit,
+    int rrf_k = 60);
+
 // Forward declarations
 class ModelManager;
 class VectorStore;
