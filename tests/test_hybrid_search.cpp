@@ -1,14 +1,16 @@
 // test_hybrid_search.cpp -- Unit tests for HybridSearchEngine.
-// Tests FTS5-only path (model=nullptr, store=nullptr).
+// Tests FTS5-only path (model=nullptr, store=nullptr) and rrf_merge() directly.
 // Uses assert() + stdout pattern consistent with other tests (no framework).
 
 #include "storage/database.h"
 #include "query/hybrid_search_engine.h"
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <cassert>
+#include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <unordered_map>
 
 namespace fs = std::filesystem;
 using namespace codetldr;
@@ -228,6 +230,218 @@ int main() {
         assert(found_analyze_python);
 
         std::cout << "PASS: Test 9 - language filter in search_text separates cpp and python\n";
+    }
+
+    // -----------------------------------------------------------------------
+    // RRF merge unit tests — call rrf_merge() directly, no database needed
+    // -----------------------------------------------------------------------
+
+    auto make_result = [](int64_t id, const std::string& name) -> SearchResult {
+        SearchResult r;
+        r.symbol_id    = id;
+        r.name         = name;
+        r.kind         = "function";
+        r.signature    = "";
+        r.documentation = "";
+        r.file_path    = "/test.cpp";
+        r.line_start   = 1;
+        r.rank         = 0.0;
+        r.provenance   = "";
+        return r;
+    };
+
+    // -----------------------------------------------------------------------
+    // Test 10: rrf_merge with FTS5-only (empty faiss list) — all provenance fts5
+    // -----------------------------------------------------------------------
+    {
+        std::vector<SearchResult> fts5 = {
+            make_result(1, "alpha"),
+            make_result(2, "beta"),
+            make_result(3, "gamma"),
+        };
+        std::vector<std::pair<int64_t, float>> faiss = {};
+        std::unordered_map<int64_t, SearchResult> lookup = {
+            {1, make_result(1, "alpha")},
+            {2, make_result(2, "beta")},
+            {3, make_result(3, "gamma")},
+        };
+        auto results = codetldr::rrf_merge(fts5, faiss, lookup, 10);
+        assert(results.size() == 3);
+        for (const auto& r : results) {
+            assert(r.provenance == "fts5");
+        }
+        std::cout << "PASS: Test 10 - rrf_merge FTS5-only: all provenance=fts5\n";
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 11: rrf_merge with FAISS-only (empty fts5 list) — all provenance vector
+    // -----------------------------------------------------------------------
+    {
+        std::vector<SearchResult> fts5 = {};
+        std::vector<std::pair<int64_t, float>> faiss = {
+            {10, 0.1f}, {11, 0.2f}, {12, 0.3f}
+        };
+        std::unordered_map<int64_t, SearchResult> lookup = {
+            {10, make_result(10, "vec_a")},
+            {11, make_result(11, "vec_b")},
+            {12, make_result(12, "vec_c")},
+        };
+        auto results = codetldr::rrf_merge(fts5, faiss, lookup, 10);
+        assert(results.size() == 3);
+        for (const auto& r : results) {
+            assert(r.provenance == "vector");
+        }
+        std::cout << "PASS: Test 11 - rrf_merge FAISS-only: all provenance=vector\n";
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 12: rrf_merge with overlap — id=1 in both, id=2 fts5-only, id=3 faiss-only
+    // -----------------------------------------------------------------------
+    {
+        std::vector<SearchResult> fts5 = {
+            make_result(1, "overlap"),
+            make_result(2, "fts5_only"),
+        };
+        std::vector<std::pair<int64_t, float>> faiss = {
+            {1, 0.1f}, {3, 0.2f}
+        };
+        std::unordered_map<int64_t, SearchResult> lookup = {
+            {1, make_result(1, "overlap")},
+            {2, make_result(2, "fts5_only")},
+            {3, make_result(3, "faiss_only")},
+        };
+        auto results = codetldr::rrf_merge(fts5, faiss, lookup, 10);
+        assert(results.size() == 3);
+        // Verify provenance assignment for each symbol
+        for (const auto& r : results) {
+            if (r.symbol_id == 1) assert(r.provenance == "both");   // provenance "both" for overlap
+            if (r.symbol_id == 2) assert(r.provenance == "fts5");
+            if (r.symbol_id == 3) assert(r.provenance == "vector");
+        }
+        std::cout << "PASS: Test 12 - rrf_merge overlap: id=1 both, id=2 fts5, id=3 vector\n";
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 13: Symbol ranked #1 in both lists has higher RRF score than #1 in one list
+    // -----------------------------------------------------------------------
+    {
+        // id=1 is #1 in both fts5 and faiss
+        // id=2 is #1 in fts5 only
+        // id=3 is #1 in faiss only (but placed after id=1)
+        std::vector<SearchResult> fts5 = {
+            make_result(1, "both_top"),
+            make_result(2, "fts5_top"),
+        };
+        std::vector<std::pair<int64_t, float>> faiss = {
+            {1, 0.1f}, {3, 0.2f}
+        };
+        std::unordered_map<int64_t, SearchResult> lookup = {
+            {1, make_result(1, "both_top")},
+            {2, make_result(2, "fts5_top")},
+            {3, make_result(3, "faiss_only")},
+        };
+        auto results = codetldr::rrf_merge(fts5, faiss, lookup, 10);
+        // id=1 should have highest rank (scored in both lists at position 0)
+        double rank_both_top = -1.0, rank_fts5_top = -1.0;
+        for (const auto& r : results) {
+            if (r.symbol_id == 1) rank_both_top = r.rank;
+            if (r.symbol_id == 2) rank_fts5_top = r.rank;
+        }
+        assert(rank_both_top > rank_fts5_top);
+        assert(results[0].symbol_id == 1);
+        std::cout << "PASS: Test 13 - id ranked #1 in both lists has higher RRF score than #1 in one\n";
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 14: FAISS sentinel id=-1 entries are skipped
+    // -----------------------------------------------------------------------
+    {
+        std::vector<SearchResult> fts5 = {};
+        std::vector<std::pair<int64_t, float>> faiss = {
+            {-1, 0.0f}, {5, 0.5f}, {-1, 0.0f}
+        };
+        std::unordered_map<int64_t, SearchResult> lookup = {
+            {5, make_result(5, "valid")},
+        };
+        auto results = codetldr::rrf_merge(fts5, faiss, lookup, 10);
+        assert(results.size() == 1);
+        assert(results[0].symbol_id == 5);
+        for (const auto& r : results) {
+            assert(r.symbol_id >= 0);
+        }
+        std::cout << "PASS: Test 14 - sentinel id=-1 entries skipped, no crash\n";
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 15: limit truncates output
+    // -----------------------------------------------------------------------
+    {
+        std::vector<SearchResult> fts5;
+        std::unordered_map<int64_t, SearchResult> lookup;
+        for (int i = 1; i <= 10; ++i) {
+            fts5.push_back(make_result(i, "sym" + std::to_string(i)));
+            lookup[i] = make_result(i, "sym" + std::to_string(i));
+        }
+        std::vector<std::pair<int64_t, float>> faiss = {};
+        auto results = codetldr::rrf_merge(fts5, faiss, lookup, 3);
+        assert(results.size() <= 3);
+        std::cout << "PASS: Test 15 - limit=3 truncates 10 results to " << results.size() << "\n";
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 16: Dedup — symbol in both lists appears exactly once
+    // -----------------------------------------------------------------------
+    {
+        std::vector<SearchResult> fts5 = {
+            make_result(1, "a"), make_result(2, "b")
+        };
+        std::vector<std::pair<int64_t, float>> faiss = {
+            {1, 0.1f}, {2, 0.2f}
+        };
+        std::unordered_map<int64_t, SearchResult> lookup = {
+            {1, make_result(1, "a")},
+            {2, make_result(2, "b")},
+        };
+        auto results = codetldr::rrf_merge(fts5, faiss, lookup, 10);
+        // Should have exactly 2 results (not 4)
+        assert(results.size() == 2);
+        std::unordered_map<int64_t, int> id_count;
+        for (const auto& r : results) id_count[r.symbol_id]++;
+        for (const auto& [id, cnt] : id_count) {
+            assert(cnt == 1);
+        }
+        std::cout << "PASS: Test 16 - dedup: 2 symbols each in both lists → exactly 2 results\n";
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 17: Different rrf_k values produce same ordering but different scores
+    // -----------------------------------------------------------------------
+    {
+        std::vector<SearchResult> fts5 = {
+            make_result(1, "top"), make_result(2, "second"), make_result(3, "third")
+        };
+        std::vector<std::pair<int64_t, float>> faiss = {
+            {1, 0.1f}, {3, 0.3f}
+        };
+        std::unordered_map<int64_t, SearchResult> lookup = {
+            {1, make_result(1, "top")},
+            {2, make_result(2, "second")},
+            {3, make_result(3, "third")},
+        };
+        auto results_k10  = codetldr::rrf_merge(fts5, faiss, lookup, 10, /*rrf_k=*/10);
+        auto results_k100 = codetldr::rrf_merge(fts5, faiss, lookup, 10, /*rrf_k=*/100);
+
+        // Same ordering
+        assert(results_k10.size() == results_k100.size());
+        for (size_t i = 0; i < results_k10.size(); ++i) {
+            assert(results_k10[i].symbol_id == results_k100[i].symbol_id);
+        }
+
+        // k=10 produces larger scores than k=100 (denominator is smaller)
+        // Compare the top-ranked symbol
+        assert(results_k10[0].rank > results_k100[0].rank);
+
+        std::cout << "PASS: Test 17 - rrf_k=10 and rrf_k=100 same ordering, k=10 has larger scores\n";
     }
 
     std::cout << "\nAll hybrid_search tests passed.\n";
