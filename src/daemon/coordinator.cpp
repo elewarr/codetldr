@@ -4,6 +4,7 @@
 #include "embedding/embedding_worker.h"
 #include "embedding/model_manager.h"
 #include "embedding/vector_store.h"
+#include "lsp/lsp_manager.h"
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <spdlog/spdlog.h>
 #include <poll.h>
@@ -125,6 +126,12 @@ void Coordinator::run() {
     sigemptyset(&sigh.sa_mask);
     ::sigaction(SIGHUP, &sigh, nullptr);
 
+    // Ignore SIGPIPE — writing to a closed LSP stdin pipe must not kill daemon (LSP-08)
+    struct sigaction sigpipe_sa{};
+    sigpipe_sa.sa_handler = SIG_IGN;
+    sigemptyset(&sigpipe_sa.sa_mask);
+    ::sigaction(SIGPIPE, &sigpipe_sa, nullptr);
+
     // Bind IPC server
     if (!ipc_server_.bind_or_die(sock_path_)) {
         throw std::runtime_error("Coordinator: another daemon is already running at " +
@@ -145,6 +152,7 @@ void Coordinator::run() {
     // Initial full-project scan: index all existing source files
     spdlog::info("Coordinator: starting initial scan of {}", project_root_.string());
     int scan_count = 0;
+    std::unordered_set<std::string> detected_languages;
     std::error_code ec;
     for (auto it = std::filesystem::recursive_directory_iterator(
              project_root_, std::filesystem::directory_options::skip_permission_denied, ec);
@@ -172,6 +180,13 @@ void Coordinator::run() {
             if (result.success) {
                 scan_count++;
                 current_status_.files_indexed = scan_count;
+                // Track detected language for LSP server selection
+                if (lsp_manager_) {
+                    const auto* lang_entry = registry_.for_extension(ext);
+                    if (lang_entry && !lang_entry->name.empty()) {
+                        detected_languages.insert(lang_entry->name);
+                    }
+                }
             } else {
                 spdlog::warn("Coordinator: initial scan failed for {}: {}", path.string(), result.error);
             }
@@ -183,6 +198,12 @@ void Coordinator::run() {
     // WAL checkpoint after initial scan
     try { db_.exec("PRAGMA wal_checkpoint(PASSIVE)"); } catch (...) {}
     spdlog::info("Coordinator: initial scan complete, indexed {} files", scan_count);
+
+    // Notify LspManager which languages are present in the project
+    if (lsp_manager_ && !detected_languages.empty()) {
+        std::vector<std::string> langs(detected_languages.begin(), detected_languages.end());
+        lsp_manager_->set_detected_languages(langs);
+    }
     current_status_.files_total = scan_count;
 
     // Update status to idle
@@ -208,13 +229,15 @@ void Coordinator::run() {
             poll_timeout_ms = std::min(poll_timeout_ms, debouncer_timeout);
         }
 
-        struct pollfd fds[2]{};
-        fds[0].fd     = ipc_server_.server_fd();
-        fds[0].events = POLLIN;
-        fds[1].fd     = wakeup_pipe_[0];
-        fds[1].events = POLLIN;
+        std::vector<pollfd> fds;
+        fds.reserve(8);  // IPC + wakeup + up to 6 LSP servers
+        fds.push_back({ipc_server_.server_fd(), POLLIN, 0});
+        fds.push_back({wakeup_pipe_[0], POLLIN, 0});
+        if (lsp_manager_) {
+            lsp_manager_->append_pollfds(fds);
+        }
 
-        int rc = ::poll(fds, 2, poll_timeout_ms);
+        int rc = ::poll(fds.data(), static_cast<nfds_t>(fds.size()), poll_timeout_ms);
 
         if (rc < 0) {
             if (errno == EINTR) continue;  // Signal received — check stop flags
@@ -255,6 +278,17 @@ void Coordinator::run() {
             }
             // Drain event queue into debouncer
             process_file_events();
+        }
+
+        // Dispatch LSP server reads and lifecycle management
+        if (lsp_manager_) {
+            for (size_t i = 2; i < fds.size(); ++i) {
+                if (fds[i].revents & (POLLIN | POLLHUP)) {
+                    lsp_manager_->dispatch_read(fds[i].fd);
+                }
+            }
+            lsp_manager_->tick();
+            lsp_manager_->check_timeouts();
         }
 
         // After handling events, flush debouncer and analyze ready files
@@ -357,6 +391,10 @@ nlohmann::json Coordinator::get_status_json() {
     j["watcher_active"]   = (file_watcher_.is_active());
     // Language support matrix
     j["language_support"] = get_language_support();
+    // LSP server status (Phase 24)
+    if (lsp_manager_) {
+        j["lsp_servers"] = lsp_manager_->status_json();
+    }
     return j;
 }
 
@@ -460,6 +498,12 @@ nlohmann::json Coordinator::get_embedding_stats_json() {
 }
 
 void Coordinator::shutdown() {
+    // Shut down LSP servers before closing IPC
+    if (lsp_manager_) {
+        spdlog::info("Coordinator: shutting down LSP servers");
+        lsp_manager_->shutdown();
+    }
+
     // Stop file watcher first
     file_watcher_.stop();
 

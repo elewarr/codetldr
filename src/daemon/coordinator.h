@@ -21,6 +21,7 @@ namespace codetldr {
     class EmbeddingWorker;
     class VectorStore;
     class ModelManager;
+    class LspManager;
 }
 
 namespace codetldr {
@@ -82,6 +83,9 @@ public:
     // Called from watcher thread.
     void notify_wakeup();
 
+    // Inject LSP lifecycle manager (non-owning). Call before run(). (Phase 24)
+    void set_lsp_manager(LspManager* mgr) { lsp_manager_ = mgr; }
+
 private:
     void shutdown();
     void process_file_events();
@@ -119,6 +123,9 @@ private:
     EmbeddingWorker* embedding_worker_ = nullptr;
     VectorStore*     vector_store_     = nullptr;
     ModelManager*    model_manager_    = nullptr;
+
+    // LSP lifecycle manager — non-owning, injected by main.cpp (Phase 24)
+    LspManager* lsp_manager_ = nullptr;
 };
 
 } // namespace codetldr

@@ -4,6 +4,7 @@
 #include "config/project_dir.h"
 #include "storage/database.h"
 #include "analysis/tree_sitter/language_registry.h"
+#include "lsp/lsp_manager.h"
 
 #include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
@@ -87,8 +88,56 @@ int main(int argc, char* argv[]) {
         spdlog::info("Socket: {}", sock_path.string());
         spdlog::info("PID: {}", static_cast<int>(::getpid()));
 
-        // Create and run coordinator
+        // Create coordinator
         codetldr::Coordinator coordinator(project_root, db.raw(), registry, sock_path);
+
+        // Set up LSP manager with known language servers
+        codetldr::LspManager lsp_manager;
+
+        // Helper: find a binary on PATH using popen("which ...")
+        auto find_binary = [](const std::string& name) -> std::string {
+            std::string cmd = "which " + name + " 2>/dev/null";
+            FILE* pipe = ::popen(cmd.c_str(), "r");
+            if (!pipe) return "";
+            char buf[512];
+            std::string result;
+            while (::fgets(buf, sizeof(buf), pipe)) {
+                result += buf;
+            }
+            ::pclose(pipe);
+            // Trim trailing newline/CR
+            while (!result.empty() && (result.back() == '\n' || result.back() == '\r')) {
+                result.pop_back();
+            }
+            return result;
+        };
+
+        // clangd for C/C++
+        std::string clangd_path = find_binary("clangd");
+        if (!clangd_path.empty()) {
+            lsp_manager.register_language("cpp", {clangd_path, {"--background-index"},
+                {".cpp", ".cc", ".cxx", ".h", ".hpp", ".c"}});
+            spdlog::info("LSP: registered clangd at {}", clangd_path);
+        }
+
+        // pyright for Python (try pyright-langserver, then basedpyright-langserver)
+        std::string pyright_path = find_binary("pyright-langserver");
+        if (pyright_path.empty()) pyright_path = find_binary("basedpyright-langserver");
+        if (!pyright_path.empty()) {
+            lsp_manager.register_language("python", {pyright_path, {"--stdio"}, {".py"}});
+            spdlog::info("LSP: registered pyright at {}", pyright_path);
+        }
+
+        // typescript-language-server for TypeScript/JavaScript
+        std::string tsserver_path = find_binary("typescript-language-server");
+        if (!tsserver_path.empty()) {
+            lsp_manager.register_language("typescript", {tsserver_path, {"--stdio"},
+                {".ts", ".tsx", ".js", ".jsx"}});
+            spdlog::info("LSP: registered typescript-language-server at {}", tsserver_path);
+        }
+
+        coordinator.set_lsp_manager(&lsp_manager);
+
         coordinator.run();
 
         spdlog::info("codetldr-daemon stopped cleanly");
