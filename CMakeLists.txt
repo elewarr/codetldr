@@ -233,3 +233,7 @@ add_test(NAME lsp_process_spawn COMMAND test_lsp_process)
 add_executable(test_lsp_framing tests/test_lsp_framing.cpp)
 target_link_libraries(test_lsp_framing PRIVATE codetldr_lsp)
 add_test(NAME lsp_framing COMMAND test_lsp_framing)
+
+add_executable(test_lsp_transport tests/test_lsp_transport.cpp)
+target_link_libraries(test_lsp_transport PRIVATE codetldr_lsp)
+add_test(NAME lsp_transport COMMAND test_lsp_transport)
