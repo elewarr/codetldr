@@ -71,6 +71,18 @@ public:
     // Return per-language capability matrix (for get_project_overview and get_status RPC).
     nlohmann::json get_language_support() const;
 
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+    // Returns (symbol_id, L2_distance) pairs. Empty if model not loaded or index empty.
+    std::vector<std::pair<int64_t, float>> semantic_search(
+        const std::string& query, int k) const;
+
+    // Report model availability for request routing.
+    ModelStatus model_status() const noexcept {
+        return model_manager_ ? model_manager_->status()
+                              : ModelStatus::model_not_installed;
+    }
+#endif
+
     // Wakeup pipe read fd: for external threads (watcher) to add
     // to their own poll() set to wake the coordinator loop.
     int wakeup_pipe_read_fd() const { return wakeup_pipe_[0]; }
