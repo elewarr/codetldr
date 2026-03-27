@@ -370,6 +370,16 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
             response["error"] = error;
         }
 
+    } else if (method == "get_embedding_stats") {
+        try {
+            response["result"] = coordinator_.get_embedding_stats_json();
+        } catch (const std::exception& e) {
+            nlohmann::json error;
+            error["code"]    = -32000;
+            error["message"] = e.what();
+            response["error"] = error;
+        }
+
     } else if (method == "get_project_overview") {
         try {
             nlohmann::json result;
