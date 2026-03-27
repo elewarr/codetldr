@@ -17,6 +17,9 @@
 #ifdef __linux__
 #include <fstream>
 #endif
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+#include <faiss/impl/IDSelector.h>
+#endif
 
 namespace {
 // Global stop flag — set by signal handlers (SIGTERM/SIGINT)
@@ -394,5 +397,50 @@ void Coordinator::shutdown() {
         // Non-fatal
     }
 }
+
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+std::vector<std::pair<int64_t, float>>
+Coordinator::semantic_search(const std::string& query, int k,
+                              const std::string& language) const {
+    if (!vector_store_ || vector_store_->ntotal() == 0) {
+        return {};
+    }
+
+    if (!language.empty()) {
+        // Build allowed symbol_id set from embedded_files JOIN files
+        std::vector<faiss::idx_t> allowed_ids;
+        try {
+            SQLite::Statement q(db_,
+                "SELECT ef.symbol_id FROM embedded_files ef "
+                "JOIN files f ON f.id = ef.file_id "
+                "WHERE f.language = ?");
+            q.bind(1, language);
+            while (q.executeStep()) {
+                allowed_ids.push_back(q.getColumn(0).getInt64());
+            }
+        } catch (const SQLite::Exception& e) {
+            spdlog::warn("Coordinator: language filter query failed: {}", e.what());
+            return {};
+        }
+
+        // Short-circuit: no vectors of this language indexed
+        if (allowed_ids.empty()) return {};
+
+        // Create a dummy query vector for now (real embed() call goes here when model present)
+        std::vector<float> query_vec(static_cast<size_t>(0)); // placeholder
+        (void)query; // suppress unused warning until model_manager is wired
+
+        faiss::IDSelectorBatch sel(allowed_ids.size(), allowed_ids.data());
+        faiss::SearchParameters params;
+        params.sel = &sel;
+        return vector_store_->search(query_vec, k, &params);
+    }
+
+    // Unfiltered path
+    std::vector<float> query_vec(static_cast<size_t>(0)); // placeholder
+    (void)query;
+    return vector_store_->search(query_vec, k);
+}
+#endif
 
 } // namespace codetldr

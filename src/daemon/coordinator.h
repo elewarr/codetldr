@@ -13,6 +13,12 @@
 #include <mutex>
 #include <vector>
 #include <string>
+#include <cstdint>
+#include <utility>
+
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+#include "embedding/vector_store.h"
+#endif
 
 // Forward declarations
 namespace SQLite { class Database; }
@@ -65,6 +71,16 @@ public:
     // Return per-language capability matrix (for get_project_overview and get_status RPC).
     nlohmann::json get_language_support() const;
 
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+    // Semantic similarity search using FAISS vector index.
+    // When language is non-empty, restricts results to vectors from files of that language
+    // using IDSelectorBatch pre-filter (not post-filter) for efficiency (LANG-04).
+    // Short-circuits (returns empty) if language is non-empty but no vectors indexed for it.
+    std::vector<std::pair<int64_t, float>> semantic_search(
+        const std::string& query, int k,
+        const std::string& language = "") const;
+#endif
+
     // Wakeup pipe read fd: for external threads (watcher) to add
     // to their own poll() set to wake the coordinator loop.
     int wakeup_pipe_read_fd() const { return wakeup_pipe_[0]; }
@@ -105,6 +121,10 @@ private:
     int wakeup_pipe_[2] = {-1, -1};  // [0]=read, [1]=write
     std::atomic<bool> stop_requested_{false};
     DaemonStatus current_status_;
+
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+    std::unique_ptr<VectorStore> vector_store_;
+#endif
 };
 
 } // namespace codetldr
