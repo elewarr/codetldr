@@ -46,6 +46,28 @@ set(FAISS_ENABLE_MKL    OFF CACHE BOOL "" FORCE)
 set(BUILD_TESTING       OFF CACHE BOOL "" FORCE)
 if(APPLE)
   set(BLA_VENDOR Apple CACHE STRING "" FORCE)
+  # libomp from Homebrew is not on the default include path on macOS.
+  # Provide OpenMP hints so FAISS finds omp.h and libgomp.
+  if(NOT DEFINED OpenMP_C_FLAGS)
+    set(OpenMP_C_FLAGS    "-Xclang -fopenmp" CACHE STRING "" FORCE)
+    set(OpenMP_C_LIB_NAMES "omp" CACHE STRING "" FORCE)
+    set(OpenMP_CXX_FLAGS  "-Xclang -fopenmp" CACHE STRING "" FORCE)
+    set(OpenMP_CXX_LIB_NAMES "omp" CACHE STRING "" FORCE)
+  endif()
+  # Find libomp from Homebrew if not already set
+  if(NOT DEFINED OpenMP_omp_LIBRARY OR NOT OpenMP_omp_LIBRARY)
+    find_library(OpenMP_omp_LIBRARY NAMES omp
+      PATHS /opt/homebrew/opt/libomp/lib /usr/local/opt/libomp/lib
+      NO_DEFAULT_PATH)
+  endif()
+  if(NOT OpenMP_omp_LIBRARY)
+    message(FATAL_ERROR
+      "CODETLDR_ENABLE_SEMANTIC_SEARCH on macOS requires libomp.\n"
+      "Install with: brew install libomp")
+  endif()
+  # Make omp.h discoverable during FAISS compilation
+  get_filename_component(_LIBOMP_DIR "${OpenMP_omp_LIBRARY}" DIRECTORY)
+  include_directories("${_LIBOMP_DIR}/../include")
 endif()
 
 FetchContent_Declare(faiss

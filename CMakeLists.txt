@@ -22,12 +22,17 @@ if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
 
   add_library(codetldr_embedding STATIC
     src/embedding/placeholder.cpp
+    src/embedding/vector_store.cpp
   )
   target_link_libraries(codetldr_embedding
-    PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp)
+    PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp codetldr_foundation)
   target_include_directories(codetldr_embedding PUBLIC src)
   target_compile_definitions(codetldr_embedding
     PUBLIC CODETLDR_ENABLE_SEMANTIC_SEARCH)
+
+  add_executable(test_vector_store tests/test_vector_store.cpp)
+  target_link_libraries(test_vector_store PRIVATE codetldr_embedding)
+  add_test(NAME vector_store COMMAND test_vector_store)
 endif()
 
 add_library(codetldr_foundation
