@@ -83,7 +83,7 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
             std::string kind  = params.value("kind", "");
             int limit = params.value("limit", 20);
 
-            auto results = search_engine_->search_symbols(query, kind, limit);
+            auto results = search_engine_->search_symbols(query, kind, /*language=*/"", limit);
 
             nlohmann::json arr = nlohmann::json::array();
             for (const auto& r : results) {

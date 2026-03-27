@@ -188,7 +188,7 @@ int main() {
         std::string kind  = params.value("kind", "");
         int limit = params.value("limit", 20);
 
-        auto results = engine.search_symbols(query, kind, limit);
+        auto results = engine.search_symbols(query, kind, /*language=*/"", limit);
         json arr = serialize_search_results(results);
 
         assert(!arr.empty());
