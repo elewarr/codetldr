@@ -159,6 +159,10 @@ add_executable(test_fts5_search tests/test_fts5_search.cpp)
 target_link_libraries(test_fts5_search PRIVATE codetldr_query codetldr_foundation)
 add_test(NAME fts5_search COMMAND test_fts5_search)
 
+add_executable(test_hybrid_search tests/test_hybrid_search.cpp)
+target_link_libraries(test_hybrid_search PRIVATE codetldr_query codetldr_foundation)
+add_test(NAME hybrid_search COMMAND test_hybrid_search)
+
 add_executable(test_context_builder tests/test_context_builder.cpp)
 target_link_libraries(test_context_builder PRIVATE codetldr_query codetldr_foundation)
 add_test(NAME context_builder COMMAND test_context_builder)
