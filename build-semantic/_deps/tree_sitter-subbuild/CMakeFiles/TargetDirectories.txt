@@ -1,3 +1,0 @@
-/Users/krle/workspace/mcp/code/build-semantic/_deps/tree_sitter-subbuild/CMakeFiles/tree_sitter-populate.dir
-/Users/krle/workspace/mcp/code/build-semantic/_deps/tree_sitter-subbuild/CMakeFiles/edit_cache.dir
-/Users/krle/workspace/mcp/code/build-semantic/_deps/tree_sitter-subbuild/CMakeFiles/rebuild_cache.dir

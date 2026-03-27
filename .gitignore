@@ -9,3 +9,4 @@ compile_commands.json
 .claude/settings.json
 .claude/package.json
 .claude/gsd-file-manifest.json
+build-semantic/

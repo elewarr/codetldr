@@ -1,3 +1,0 @@
-/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/CMakeFiles/ts_python-populate.dir
-/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/CMakeFiles/edit_cache.dir
-/Users/krle/workspace/mcp/code/build-semantic/_deps/ts_python-subbuild/CMakeFiles/rebuild_cache.dir
