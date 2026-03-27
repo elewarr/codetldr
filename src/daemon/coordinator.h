@@ -2,6 +2,8 @@
 #include "daemon/ipc_server.h"
 #include "daemon/request_router.h"
 #include "daemon/status.h"
+#include "query/hybrid_search_engine.h"
+#include "query/search_engine.h"
 #include "watcher/file_watcher.h"
 #include "watcher/ignore_filter.h"
 #include "watcher/debouncer.h"
@@ -13,12 +15,6 @@
 #include <mutex>
 #include <vector>
 #include <string>
-#include <cstdint>
-#include <utility>
-
-#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
-#include "embedding/vector_store.h"
-#endif
 
 // Forward declarations
 namespace SQLite { class Database; }
@@ -45,11 +41,13 @@ public:
     // registry:       initialized LanguageRegistry reference
     // sock_path:      full path to daemon.sock
     // idle_timeout:   auto-shutdown after this much idle time (default 30min)
+    // hybrid_config:  RRF search tuning (parsed from config.toml [search] section)
     Coordinator(const std::filesystem::path& project_root,
                 SQLite::Database& db,
                 const LanguageRegistry& registry,
                 const std::filesystem::path& sock_path,
-                std::chrono::seconds idle_timeout = std::chrono::seconds(1800));
+                std::chrono::seconds idle_timeout = std::chrono::seconds(1800),
+                HybridSearchConfig hybrid_config = {});
 
     ~Coordinator();
 
@@ -71,15 +69,10 @@ public:
     // Return per-language capability matrix (for get_project_overview and get_status RPC).
     nlohmann::json get_language_support() const;
 
-#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
-    // Semantic similarity search using FAISS vector index.
-    // When language is non-empty, restricts results to vectors from files of that language
-    // using IDSelectorBatch pre-filter (not post-filter) for efficiency (LANG-04).
-    // Short-circuits (returns empty) if language is non-empty but no vectors indexed for it.
-    std::vector<std::pair<int64_t, float>> semantic_search(
-        const std::string& query, int k,
-        const std::string& language = "") const;
-#endif
+    // Semantic (FAISS) search — raw vector search path, separate from HybridSearchEngine.
+    // Returns empty vector when CODETLDR_ENABLE_SEMANTIC_SEARCH is OFF or model not loaded.
+    // When Phase 15 ModelManager is implemented, call model_manager_->embed(query, true).
+    std::vector<SearchResult> semantic_search(const std::string& query, int limit = 20);
 
     // Wakeup pipe read fd: for external threads (watcher) to add
     // to their own poll() set to wake the coordinator loop.
@@ -121,10 +114,6 @@ private:
     int wakeup_pipe_[2] = {-1, -1};  // [0]=read, [1]=write
     std::atomic<bool> stop_requested_{false};
     DaemonStatus current_status_;
-
-#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
-    std::unique_ptr<VectorStore> vector_store_;
-#endif
 };
 
 } // namespace codetldr

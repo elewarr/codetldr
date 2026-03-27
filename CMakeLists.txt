@@ -22,7 +22,6 @@ if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
 
   add_library(codetldr_embedding STATIC
     src/embedding/placeholder.cpp
-    src/embedding/vector_store.cpp
   )
   target_link_libraries(codetldr_embedding
     PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp)
@@ -72,15 +71,22 @@ add_library(codetldr_daemon
 target_include_directories(codetldr_daemon PUBLIC src)
 target_link_libraries(codetldr_daemon
   PUBLIC codetldr_foundation codetldr_analysis codetldr_query
-         nlohmann_json::nlohmann_json spdlog::spdlog CLI11::CLI11 efsw-static Threads::Threads)
+         nlohmann_json::nlohmann_json spdlog::spdlog CLI11::CLI11 tomlplusplus::tomlplusplus
+         efsw-static Threads::Threads)
 
 add_library(codetldr_query
   src/query/search_engine.cpp
   src/query/context_builder.cpp
+  src/query/hybrid_search_engine.cpp
 )
 target_include_directories(codetldr_query PUBLIC src)
 target_link_libraries(codetldr_query
   PUBLIC codetldr_foundation nlohmann_json::nlohmann_json)
+
+if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
+  target_link_libraries(codetldr_query PUBLIC codetldr_embedding)
+  target_compile_definitions(codetldr_query PUBLIC CODETLDR_ENABLE_SEMANTIC_SEARCH)
+endif()
 
 add_executable(codetldr-daemon src/daemon/main.cpp)
 target_link_libraries(codetldr-daemon PRIVATE codetldr_daemon)
@@ -153,6 +159,10 @@ add_executable(test_fts5_search tests/test_fts5_search.cpp)
 target_link_libraries(test_fts5_search PRIVATE codetldr_query codetldr_foundation)
 add_test(NAME fts5_search COMMAND test_fts5_search)
 
+add_executable(test_hybrid_search tests/test_hybrid_search.cpp)
+target_link_libraries(test_hybrid_search PRIVATE codetldr_query codetldr_foundation)
+add_test(NAME hybrid_search COMMAND test_hybrid_search)
+
 add_executable(test_context_builder tests/test_context_builder.cpp)
 target_link_libraries(test_context_builder PRIVATE codetldr_query codetldr_foundation)
 add_test(NAME context_builder COMMAND test_context_builder)
@@ -172,15 +182,6 @@ add_test(NAME new_rpc_methods COMMAND test_new_rpc_methods)
 add_executable(test_cli_init tests/test_cli_init.cpp)
 target_link_libraries(test_cli_init PRIVATE codetldr_daemon codetldr_analysis codetldr_foundation)
 add_test(NAME cli_init COMMAND test_cli_init)
-
-add_executable(test_semantic_search tests/test_semantic_search.cpp)
-if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
-  target_link_libraries(test_semantic_search PRIVATE codetldr_embedding)
-  target_compile_definitions(test_semantic_search PRIVATE CODETLDR_ENABLE_SEMANTIC_SEARCH)
-else()
-  target_link_libraries(test_semantic_search PRIVATE codetldr_foundation)
-endif()
-add_test(NAME semantic_search COMMAND test_semantic_search)
 
 add_executable(test_mcp_provider tests/test_mcp_provider.cpp)
 target_link_libraries(test_mcp_provider PRIVATE nlohmann_json::nlohmann_json)

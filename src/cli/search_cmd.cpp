@@ -15,22 +15,17 @@ void register_search_cmd(CLI::App& app, std::string& project_root_str) {
     // Positional query argument
     static std::string query_str;
     static std::string kind_str;
-    static std::string lang_str;
     static int limit = 20;
     static bool json_output = false;
     static bool text_mode = false;
-    static bool semantic_mode = false;
     static std::string search_root_str;
 
     search_cmd->add_option("query", query_str, "Search query")->required();
     search_cmd->add_option("--kind", kind_str,
                            "Filter by symbol kind: function, class, method, struct, enum");
-    search_cmd->add_option("--lang", lang_str,
-                           "Filter results by programming language (e.g. cpp, python, typescript)");
     search_cmd->add_option("--limit", limit, "Maximum results")->default_val(20);
     search_cmd->add_flag("--json", json_output, "Output as JSON");
     search_cmd->add_flag("--text", text_mode, "Full-text search (instead of symbol search)");
-    search_cmd->add_flag("--semantic", semantic_mode, "Semantic similarity search (requires model)");
     search_cmd->add_option("--project-root", project_root_str,
                            "Path to the project root (default: auto-detect git root or cwd)");
 
@@ -64,16 +59,11 @@ void register_search_cmd(CLI::App& app, std::string& project_root_str) {
         if (!kind_str.empty()) {
             params["kind"] = kind_str;
         }
-        if (!lang_str.empty()) {
-            params["lang"] = lang_str;
-        }
 
         // Call appropriate method
         nlohmann::json resp;
         try {
-            if (semantic_mode) {
-                resp = client.call("semantic_search", params);
-            } else if (text_mode) {
+            if (text_mode) {
                 resp = client.call("search_text", params);
             } else {
                 resp = client.call("search_symbols", params);
@@ -109,8 +99,8 @@ void register_search_cmd(CLI::App& app, std::string& project_root_str) {
                     std::string name = item.value("name", "?");
                     std::string kind = item.value("kind", "");
                     std::string file = item.value("file_path", "");
-                    // Support both legacy "line" and current "line_start" field names
-                    int line = item.value("line_start", item.value("line", 0));
+                    int line = item.value("line_start", 0);
+                    std::string prov = item.value("provenance", "");
 
                     if (!kind.empty()) {
                         std::cout << name << " (" << kind << ")";
@@ -123,12 +113,8 @@ void register_search_cmd(CLI::App& app, std::string& project_root_str) {
                             std::cout << ":" << line;
                         }
                     }
-                    // Show similarity score if present (semantic search results)
-                    float score = item.value("score", -1.0f);
-                    if (score >= 0.0f) {
-                        char score_buf[16];
-                        std::snprintf(score_buf, sizeof(score_buf), "%.2f", score);
-                        std::cout << " [score=" << score_buf << "]";
+                    if (!prov.empty()) {
+                        std::cout << " [" << prov << "]";
                     }
                     std::cout << "\n";
                 }
