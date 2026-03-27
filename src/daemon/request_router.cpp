@@ -2,6 +2,7 @@
 #include "daemon/coordinator.h"
 #include "query/search_engine.h"
 #include "query/context_builder.h"
+#include <SQLiteCpp/SQLiteCpp.h>
 #include <unistd.h>
 
 namespace codetldr {
@@ -268,28 +269,103 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
                 result["callees"] = nlohmann::json::array();
 
                 if (sym.found) {
-                    if (direction == "callers" || direction == "both") {
-                        auto callers = context_builder_->get_caller_names(sym.id);
-                        for (const auto& c : callers) result["callers"].push_back(c);
-                    }
+                    // --- Callees ---
                     if (direction == "callees" || direction == "both") {
-                        auto callees = context_builder_->get_callee_names(sym.id);
-                        for (const auto& c : callees) result["callees"].push_back(c);
+                        bool has_lsp_callees = false;
+                        try {
+                            SQLite::Statement q(db_, R"sql(
+                                SELECT d.callee_name, d.def_file_path, d.def_line, d.source
+                                FROM lsp_definitions d
+                                WHERE d.caller_file_id = (SELECT id FROM files WHERE path = ?)
+                                  AND d.call_line BETWEEN ? AND ?
+                            )sql");
+                            q.bind(1, sym.file_path);
+                            q.bind(2, sym.line_start);
+                            q.bind(3, sym.line_end);
+                            while (q.executeStep()) {
+                                has_lsp_callees = true;
+                                nlohmann::json edge;
+                                edge["name"]   = q.getColumn(0).getString();
+                                edge["file"]   = q.getColumn(1).isNull() ? "" : q.getColumn(1).getString();
+                                edge["line"]   = q.getColumn(2).isNull() ? 0 : q.getColumn(2).getInt();
+                                edge["source"] = q.getColumn(3).getString();
+                                result["callees"].push_back(std::move(edge));
+                            }
+                        } catch (...) {}
 
-                        // Recurse for depth > 1
-                        if (depth > 1) {
-                            nlohmann::json nested = nlohmann::json::object();
-                            for (const auto& callee_name : callees) {
-                                SymbolInfo callee_sym = context_builder_->find_symbol(callee_name);
-                                if (callee_sym.found) {
-                                    auto sub_callees = context_builder_->get_callee_names(callee_sym.id);
-                                    nlohmann::json sub_arr = nlohmann::json::array();
-                                    for (const auto& sc : sub_callees) sub_arr.push_back(sc);
-                                    nested[callee_name] = std::move(sub_arr);
+                        // Fallback to Tree-sitter if no LSP data
+                        if (!has_lsp_callees) {
+                            auto callees = context_builder_->get_callee_names(sym.id);
+                            for (const auto& c : callees) {
+                                nlohmann::json edge;
+                                edge["name"]   = c;
+                                edge["file"]   = "";
+                                edge["line"]   = 0;
+                                edge["source"] = "tree-sitter-approximate";
+                                result["callees"].push_back(std::move(edge));
+                            }
+
+                            // Recurse for depth > 1 (name-based, tree-sitter only)
+                            if (depth > 1) {
+                                nlohmann::json nested = nlohmann::json::object();
+                                for (const auto& callee_name : callees) {
+                                    SymbolInfo callee_sym = context_builder_->find_symbol(callee_name);
+                                    if (callee_sym.found) {
+                                        auto sub_callees = context_builder_->get_callee_names(callee_sym.id);
+                                        nlohmann::json sub_arr = nlohmann::json::array();
+                                        for (const auto& sc : sub_callees) sub_arr.push_back(sc);
+                                        nested[callee_name] = std::move(sub_arr);
+                                    }
+                                }
+                                if (!nested.empty()) {
+                                    result["callees_depth2"] = std::move(nested);
                                 }
                             }
-                            if (!nested.empty()) {
-                                result["callees_depth2"] = std::move(nested);
+                        }
+                    }
+
+                    // --- Callers ---
+                    if (direction == "callers" || direction == "both") {
+                        bool has_lsp_callers = false;
+                        try {
+                            SQLite::Statement q(db_, R"sql(
+                                SELECT r.caller_file_path, r.caller_line, r.source,
+                                       COALESCE(
+                                           (SELECT s.name FROM symbols s
+                                            JOIN files f ON s.file_id = f.id
+                                            WHERE f.path = r.caller_file_path
+                                              AND s.line_start <= r.caller_line
+                                              AND s.line_end >= r.caller_line
+                                            LIMIT 1),
+                                           'unknown'
+                                       ) as caller_name
+                                FROM lsp_references r
+                                WHERE r.callee_file_id = (SELECT id FROM files WHERE path = ?)
+                                  AND r.callee_name = ?
+                            )sql");
+                            q.bind(1, sym.file_path);
+                            q.bind(2, sym.name);
+                            while (q.executeStep()) {
+                                has_lsp_callers = true;
+                                nlohmann::json edge;
+                                edge["name"]   = q.getColumn(3).getString();
+                                edge["file"]   = q.getColumn(0).isNull() ? "" : q.getColumn(0).getString();
+                                edge["line"]   = q.getColumn(1).isNull() ? 0 : q.getColumn(1).getInt();
+                                edge["source"] = q.getColumn(2).getString();
+                                result["callers"].push_back(std::move(edge));
+                            }
+                        } catch (...) {}
+
+                        // Fallback to Tree-sitter if no LSP data
+                        if (!has_lsp_callers) {
+                            auto callers = context_builder_->get_caller_names(sym.id);
+                            for (const auto& c : callers) {
+                                nlohmann::json edge;
+                                edge["name"]   = c;
+                                edge["file"]   = "";
+                                edge["line"]   = 0;
+                                edge["source"] = "tree-sitter-approximate";
+                                result["callers"].push_back(std::move(edge));
                             }
                         }
                     }
