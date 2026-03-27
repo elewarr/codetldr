@@ -6,7 +6,7 @@
 //
 // Tests:
 //   1. initialize returns correct protocolVersion, serverInfo, capabilities
-//   2. tools/list returns 8 tools with valid inputSchema
+//   2. tools/list returns 9 tools with valid inputSchema
 //   3. tools/call with no daemon running returns isError:true
 //   4. Unknown method returns JSON-RPC -32601 error
 //   5. ping returns empty result
@@ -183,7 +183,7 @@ static void test_1_initialize(const fs::path& binary, const fs::path& project_ro
 // Test 2: tools/list returns 8 tools with valid inputSchema
 // ---------------------------------------------------------------------------
 static void test_2_tools_list(const fs::path& binary, const fs::path& project_root) {
-    std::cout << "Test 2: tools/list returns 8 tools with valid inputSchema..." << std::flush;
+    std::cout << "Test 2: tools/list returns 9 tools with valid inputSchema..." << std::flush;
 
     auto proc = spawn_mcp(binary, project_root);
 
@@ -201,13 +201,13 @@ static void test_2_tools_list(const fs::path& binary, const fs::path& project_ro
 
     auto& tools = resp["result"]["tools"];
     assert(tools.is_array() && "Test 2: tools should be array");
-    assert(tools.size() == 8 && "Test 2: should have exactly 8 tools");
+    assert(tools.size() == 9 && "Test 2: should have exactly 9 tools");
 
     // Verify all expected tool names are present
     std::vector<std::string> expected_names = {
         "search_symbols", "search_text", "get_file_summary",
         "get_function_detail", "get_call_graph", "get_project_overview",
-        "get_control_flow", "get_data_flow"
+        "get_control_flow", "get_data_flow", "get_embedding_stats"
     };
     for (const auto& name : expected_names) {
         bool found = false;
