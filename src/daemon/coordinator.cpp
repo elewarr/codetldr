@@ -1,6 +1,7 @@
 #include "daemon/coordinator.h"
 #include "analysis/pipeline.h"
 #include "common/logging.h"
+#include "config/paths.h"
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <spdlog/spdlog.h>
 #include <poll.h>
@@ -99,6 +100,31 @@ Coordinator::Coordinator(const std::filesystem::path& project_root,
 
     // Set up RequestRouter (pass db_ for SearchEngine and ContextBuilder)
     router_ = std::make_unique<RequestRouter>(*this, db_);
+
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+    {
+        namespace fs = std::filesystem;
+        XdgPaths xdg = resolve_xdg_paths();
+        fs::path cache_dir = xdg.cache_home / "models" / "CodeRankEmbed";
+        fs::path model_path = cache_dir / "model_quantized.onnx";
+        fs::path tokenizer_path = cache_dir / "tokenizer.json";
+
+        model_manager_ = std::make_unique<ModelManager>(model_path, tokenizer_path);
+
+        if (model_manager_->status() == ModelStatus::loaded) {
+            fs::path faiss_path = project_root_ / ".codetldr" / "vectors.faiss";
+            vector_store_ = std::make_unique<VectorStore>(
+                VectorStore::open(faiss_path, ModelManager::kEmbeddingDim));
+            embedding_worker_ = std::make_unique<EmbeddingWorker>(
+                db_, project_root_, model_manager_.get(), vector_store_.get(), model_path);
+            spdlog::info("Coordinator: semantic search enabled (model loaded)");
+        } else {
+            spdlog::info("Coordinator: semantic search disabled (model status: {})",
+                         model_manager_->status() == ModelStatus::model_not_installed
+                             ? "not installed" : "load failed");
+        }
+    }
+#endif
 }
 
 Coordinator::~Coordinator() {
@@ -169,6 +195,11 @@ void Coordinator::run() {
             if (result.success) {
                 scan_count++;
                 current_status_.files_indexed = scan_count;
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+                if (embedding_worker_) {
+                    embedding_worker_->enqueue(result.file_id);
+                }
+#endif
             } else {
                 spdlog::warn("Coordinator: initial scan failed for {}: {}", path.string(), result.error);
             }
@@ -181,6 +212,34 @@ void Coordinator::run() {
     try { db_.exec("PRAGMA wal_checkpoint(PASSIVE)"); } catch (...) {}
     spdlog::info("Coordinator: initial scan complete, indexed {} files", scan_count);
     current_status_.files_total = scan_count;
+
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+    if (embedding_worker_) {
+        // Check model fingerprint: if changed or first run, trigger full rebuild
+        namespace fs = std::filesystem;
+        XdgPaths xdg = resolve_xdg_paths();
+        fs::path model_path = xdg.cache_home / "models" / "CodeRankEmbed" / "model_quantized.onnx";
+        std::string current_fp = EmbeddingWorker::compute_model_fingerprint(model_path);
+        if (!current_fp.empty()) {
+            std::string stored_fp;
+            try {
+                SQLite::Statement q(db_, "SELECT value FROM metadata WHERE key = 'model_fingerprint'");
+                if (q.executeStep()) {
+                    stored_fp = q.getColumn(0).getString();
+                }
+            } catch (...) {
+                // metadata table may not exist if migrations haven't run yet — safe to ignore
+            }
+            if (stored_fp != current_fp) {
+                spdlog::info("Coordinator: model fingerprint changed ({} -> {}), scheduling full re-embedding",
+                             stored_fp.empty() ? "none" : stored_fp, current_fp);
+                embedding_worker_->enqueue_full_rebuild();
+            } else {
+                spdlog::info("Coordinator: model fingerprint matches, skipping full rebuild");
+            }
+        }
+    }
+#endif
 
     // Update status to idle
     current_status_.state = DaemonState::kIdle;
@@ -270,6 +329,11 @@ void Coordinator::run() {
                         spdlog::info("Coordinator: indexed {} ({} symbols, {} calls)",
                                      path, result.symbols_count, result.calls_count);
                         current_status_.files_indexed++;
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+                        if (embedding_worker_) {
+                            embedding_worker_->enqueue(result.file_id);
+                        }
+#endif
                     } else {
                         spdlog::warn("Coordinator: analysis failed for {}: {}", path, result.error);
                     }
@@ -365,7 +429,15 @@ void Coordinator::notify_wakeup() {
 }
 
 void Coordinator::shutdown() {
-    // Stop file watcher first
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+    // Stop embedding worker FIRST — it may be reading from SQLite
+    if (embedding_worker_) {
+        spdlog::info("Coordinator: stopping embedding worker");
+        embedding_worker_->stop();
+    }
+#endif
+
+    // Stop file watcher
     file_watcher_.stop();
 
     // Close IPC server (unlinks socket)
