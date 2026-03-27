@@ -88,11 +88,18 @@ int LspProcess::spawn(const std::string& command, const std::vector<std::string>
     posix_spawnattr_t attr;
     posix_spawnattr_init(&attr);
 
+    // Reset SIGPIPE to SIG_DFL in child process — daemon ignores SIGPIPE (LSP-08)
+    // but child LSP servers must have default signal disposition
+    sigset_t sigdefault;
+    sigemptyset(&sigdefault);
+    sigaddset(&sigdefault, SIGPIPE);
+    posix_spawnattr_setsigdefault(&attr, &sigdefault);
+
+    short spawn_flags = POSIX_SPAWN_SETSIGDEF;
 #ifdef __APPLE__
-    // POSIX_SPAWN_CLOEXEC_DEFAULT: close all fds except those explicitly set up
-    // via file actions — prevents fd leaks into child process.
-    posix_spawnattr_setflags(&attr, POSIX_SPAWN_CLOEXEC_DEFAULT);
+    spawn_flags |= POSIX_SPAWN_CLOEXEC_DEFAULT;
 #endif
+    posix_spawnattr_setflags(&attr, spawn_flags);
 
     // Build argv: [command, arg0, arg1, ..., nullptr]
     std::vector<char*> argv;

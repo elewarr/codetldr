@@ -78,7 +78,8 @@ add_library(codetldr_daemon
 target_include_directories(codetldr_daemon PUBLIC src)
 target_link_libraries(codetldr_daemon
   PUBLIC codetldr_foundation codetldr_analysis codetldr_query codetldr_embedding_stats
-         nlohmann_json::nlohmann_json spdlog::spdlog CLI11::CLI11 efsw-static Threads::Threads)
+         nlohmann_json::nlohmann_json spdlog::spdlog CLI11::CLI11 efsw-static Threads::Threads
+         codetldr_lsp)
 
 add_library(codetldr_query
   src/query/search_engine.cpp
@@ -101,6 +102,7 @@ add_library(codetldr_lsp STATIC
   src/lsp/lsp_process.cpp
   src/lsp/lsp_framing.cpp
   src/lsp/lsp_transport.cpp
+  src/lsp/lsp_manager.cpp
 )
 target_include_directories(codetldr_lsp PUBLIC src)
 target_link_libraries(codetldr_lsp
@@ -237,3 +239,7 @@ add_test(NAME lsp_framing COMMAND test_lsp_framing)
 add_executable(test_lsp_transport tests/test_lsp_transport.cpp)
 target_link_libraries(test_lsp_transport PRIVATE codetldr_lsp)
 add_test(NAME lsp_transport COMMAND test_lsp_transport)
+
+add_executable(test_lsp_manager tests/test_lsp_manager.cpp)
+target_link_libraries(test_lsp_manager PRIVATE codetldr_lsp)
+add_test(NAME lsp_manager COMMAND test_lsp_manager)
