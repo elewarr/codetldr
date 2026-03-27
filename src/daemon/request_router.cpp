@@ -1,19 +1,38 @@
 #include "daemon/request_router.h"
 #include "daemon/coordinator.h"
-#include "query/search_engine.h"
+#include "query/hybrid_search_engine.h"
 #include "query/context_builder.h"
 #include <unistd.h>
 
 namespace codetldr {
 
+// Legacy constructor: derive db_path from the open SQLite connection's filename.
+// HybridSearchEngine opens its own read-only connection from the same path.
+// When db is in-memory (":memory:"), HybridSearchEngine falls back to FTS5 via db.
 RequestRouter::RequestRouter(Coordinator& coordinator, SQLite::Database& db)
     : coordinator_(coordinator)
     , db_(db)
-    , search_engine_(std::make_unique<SearchEngine>(db))
+    , hybrid_engine_(std::make_unique<HybridSearchEngine>(
+          std::filesystem::path(db.getFilename()),
+          /*model=*/nullptr,
+          /*store=*/nullptr))
     , context_builder_(std::make_unique<ContextBuilder>(db))
 {}
 
-// Destructor defined here where SearchEngine and ContextBuilder are complete types.
+// Full constructor with hybrid search support.
+RequestRouter::RequestRouter(Coordinator& coordinator,
+                              SQLite::Database& db,
+                              const std::filesystem::path& db_path,
+                              ModelManager* model,
+                              VectorStore* store,
+                              HybridSearchConfig hybrid_config)
+    : coordinator_(coordinator)
+    , db_(db)
+    , hybrid_engine_(std::make_unique<HybridSearchEngine>(db_path, model, store, hybrid_config))
+    , context_builder_(std::make_unique<ContextBuilder>(db))
+{}
+
+// Destructor defined here where complete types are available.
 RequestRouter::~RequestRouter() = default;
 
 nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
@@ -51,10 +70,10 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
         try {
             const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
             std::string query    = params.value("query", "");
-            std::string language = params.value("lang", "");
-            int limit            = params.value("limit", 20);
+            std::string language = params.value("language", "");
+            int limit = params.value("limit", 20);
 
-            auto results = search_engine_->search_text(query, language, limit);
+            auto results = hybrid_engine_->search_text(query, language, limit);
 
             nlohmann::json arr = nlohmann::json::array();
             for (const auto& r : results) {
@@ -67,22 +86,10 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
                 item["file_path"]     = r.file_path;
                 item["line_start"]    = r.line_start;
                 item["rank"]          = r.rank;
+                item["provenance"]    = r.provenance;
                 arr.push_back(std::move(item));
             }
             response["result"] = std::move(arr);
-            // Unrecognized language warning: empty results + unknown language
-            if (!language.empty() && arr.empty()) {
-                try {
-                    SQLite::Statement lc(db_,
-                        "SELECT COUNT(*) FROM files WHERE language = ?");
-                    lc.bind(1, language);
-                    lc.executeStep();
-                    if (lc.getColumn(0).getInt() == 0) {
-                        response["warning"] = "Unknown language '" + language +
-                            "'. No files indexed for this language.";
-                    }
-                } catch (...) {}
-            }
         } catch (const std::exception& e) {
             nlohmann::json error;
             error["code"]    = -32000;
@@ -95,10 +102,10 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
             const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
             std::string query    = params.value("query", "");
             std::string kind     = params.value("kind", "");
-            std::string language = params.value("lang", "");
-            int limit            = params.value("limit", 20);
+            std::string language = params.value("language", "");
+            int limit = params.value("limit", 20);
 
-            auto results = search_engine_->search_symbols(query, kind, language, limit);
+            auto results = hybrid_engine_->search_symbols(query, kind, language, limit);
 
             nlohmann::json arr = nlohmann::json::array();
             for (const auto& r : results) {
@@ -111,22 +118,10 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
                 item["file_path"]     = r.file_path;
                 item["line_start"]    = r.line_start;
                 item["rank"]          = r.rank;
+                item["provenance"]    = r.provenance;
                 arr.push_back(std::move(item));
             }
             response["result"] = std::move(arr);
-            // Unrecognized language warning: empty results + unknown language
-            if (!language.empty() && arr.empty()) {
-                try {
-                    SQLite::Statement lc(db_,
-                        "SELECT COUNT(*) FROM files WHERE language = ?");
-                    lc.bind(1, language);
-                    lc.executeStep();
-                    if (lc.getColumn(0).getInt() == 0) {
-                        response["warning"] = "Unknown language '" + language +
-                            "'. No files indexed for this language.";
-                    }
-                } catch (...) {}
-            }
         } catch (const std::exception& e) {
             nlohmann::json error;
             error["code"]    = -32000;
@@ -441,45 +436,6 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
             error["message"] = e.what();
             response["error"] = error;
         }
-
-#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
-    } else if (method == "semantic_search") {
-        try {
-            const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
-            std::string query    = params.value("query", "");
-            std::string language = params.value("lang", "");
-            int limit            = params.value("limit", 10);
-
-            auto search_results = coordinator_.semantic_search(query, limit, language);
-
-            nlohmann::json arr = nlohmann::json::array();
-            for (const auto& [sym_id, dist] : search_results) {
-                nlohmann::json item;
-                item["symbol_id"] = sym_id;
-                item["distance"]  = dist;
-                arr.push_back(std::move(item));
-            }
-            response["result"] = std::move(arr);
-            // Unrecognized language warning
-            if (!language.empty() && arr.empty()) {
-                try {
-                    SQLite::Statement lc(db_,
-                        "SELECT COUNT(*) FROM files WHERE language = ?");
-                    lc.bind(1, language);
-                    lc.executeStep();
-                    if (lc.getColumn(0).getInt() == 0) {
-                        response["warning"] = "Unknown language '" + language +
-                            "'. No files indexed for this language.";
-                    }
-                } catch (...) {}
-            }
-        } catch (const std::exception& e) {
-            nlohmann::json error;
-            error["code"]    = -32000;
-            error["message"] = e.what();
-            response["error"] = error;
-        }
-#endif
 
     } else {
         nlohmann::json error;

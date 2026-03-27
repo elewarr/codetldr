@@ -173,11 +173,6 @@ bool LanguageRegistry::register_language(const std::string& name,
     return true;
 }
 
-const LanguageEntry* LanguageRegistry::for_language(const std::string& name) const {
-    auto it = entries_.find(name);
-    return it != entries_.end() ? &it->second : nullptr;
-}
-
 const LanguageEntry* LanguageRegistry::for_extension(const std::string& ext) const {
     auto it = ext_to_lang_.find(ext);
     if (it == ext_to_lang_.end()) return nullptr;

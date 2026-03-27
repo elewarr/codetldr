@@ -4,7 +4,6 @@
 #include "config/project_dir.h"
 #include "cli/search_cmd.h"
 #include "cli/init_cmd.h"
-#include "cli/model_cmd.h"
 
 #include <CLI/CLI.hpp>
 #include <nlohmann/json.hpp>
@@ -281,11 +280,6 @@ int main(int argc, char* argv[]) {
     // Subcommand: init (registered from init_cmd.cpp)
     // =========================================================
     register_init_cmd(app, project_root_str);
-
-    // =========================================================
-    // Subcommand: model (registered from model_cmd.cpp)
-    // =========================================================
-    register_model_cmd(app, project_root_str);
 
     CLI11_PARSE(app, argc, argv);
     return 0;

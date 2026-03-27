@@ -1,7 +1,6 @@
 #pragma once
 #include "analysis/tree_sitter/extractor.h"
 #include "analysis/tree_sitter/language_registry.h"
-#include <cstdint>
 #include <filesystem>
 #include <string>
 
@@ -15,7 +14,6 @@ struct AnalysisResult {
     int calls_count;
     int cfg_count;      // number of CFG nodes extracted
     int dfg_count;      // number of DFG edges extracted
-    int64_t file_id;    // database file id -- for embedding worker enqueue
     bool success;
     std::string error;  // empty if success
 };
