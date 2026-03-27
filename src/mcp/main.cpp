@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 
 // ---------------------------------------------------------------------------
 // Helper: make_tools_list_response
-// Build all 8 MCP tool definitions with inputSchema and wrap in JSON-RPC envelope.
+// Build all 9 MCP tool definitions with inputSchema and wrap in JSON-RPC envelope.
 // ---------------------------------------------------------------------------
 static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
     nlohmann::json tools = nlohmann::json::array();
@@ -129,6 +129,22 @@ static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
         }}
     });
 
+    tools.push_back({
+        {"name", "semantic_search"},
+        {"description", "Semantic similarity search over indexed code using embeddings. "
+                        "Finds conceptually related functions by meaning, not just keywords. "
+                        "Requires model installation via 'codetldr model download'. "
+                        "Returns ranked results with name, kind, file_path, line_start, and similarity score."},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"query", {{"type","string"},{"description","Natural language or code query"}}},
+                {"limit", {{"type","integer"},{"description","Maximum results (default 10)"}}}
+            }},
+            {"required", nlohmann::json::array({"query"})}
+        }}
+    });
+
     return nlohmann::json{
         {"jsonrpc", "2.0"},
         {"id",      id},
@@ -172,6 +188,8 @@ static nlohmann::json dispatch_tool_call(const std::string& tool_name,
             daemon_resp = client.call("get_control_flow", arguments);
         } else if (tool_name == "get_data_flow") {
             daemon_resp = client.call("get_data_flow", arguments);
+        } else if (tool_name == "semantic_search") {
+            daemon_resp = client.call("semantic_search", arguments);
         } else {
             return {
                 {"content", {{{"type","text"},{"text","Unknown tool: " + tool_name}}}},
