@@ -32,7 +32,8 @@ inline constexpr ModelSpec kRegisteredModels[] = {
         "https://huggingface.co/nomic-ai/CodeRankEmbed/resolve/main/onnx/model_quantized.onnx",
         "https://huggingface.co/nomic-ai/CodeRankEmbed/resolve/main/tokenizer.json",
         "", "",
-        "codetldr/models/CodeRankEmbed",
+        // cache_subdir is relative to XDG_CACHE_HOME/codetldr (i.e., xdg.cache_home)
+        "models/CodeRankEmbed",
         true
     },
     {
@@ -42,7 +43,7 @@ inline constexpr ModelSpec kRegisteredModels[] = {
         "https://huggingface.co/jinaai/jina-embeddings-v2-base-code/resolve/main/onnx/model_quantized.onnx",
         "https://huggingface.co/jinaai/jina-embeddings-v2-base-code/resolve/main/tokenizer.json",
         "", "",
-        "codetldr/models/jina-code-v2",
+        "models/jina-code-v2",
         false
     },
     {
@@ -52,7 +53,7 @@ inline constexpr ModelSpec kRegisteredModels[] = {
         "https://huggingface.co/BAAI/bge-base-en-v1.5/resolve/main/onnx/model_quantized.onnx",
         "https://huggingface.co/BAAI/bge-base-en-v1.5/resolve/main/tokenizer.json",
         "", "",
-        "codetldr/models/bge-base-en-v1.5",
+        "models/bge-base-en-v1.5",
         false
     },
     {
@@ -62,7 +63,7 @@ inline constexpr ModelSpec kRegisteredModels[] = {
         "https://huggingface.co/BAAI/bge-large-en-v1.5/resolve/main/onnx/model_quantized.onnx",
         "https://huggingface.co/BAAI/bge-large-en-v1.5/resolve/main/tokenizer.json",
         "", "",
-        "codetldr/models/bge-large-en-v1.5",
+        "models/bge-large-en-v1.5",
         false
     },
 };
