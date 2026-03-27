@@ -1,6 +1,7 @@
 build/
-build-verify/
-cmake-build-debug/
+build-*/
+build_*/
+cmake-build-*/
 
 .DS_Store
 compile_commands.json
