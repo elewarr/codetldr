@@ -14,6 +14,12 @@
 #include <vector>
 #include <string>
 
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+#include "embedding/model_manager.h"
+#include "embedding/vector_store.h"
+#include "embedding/embedding_worker.h"
+#endif
+
 // Forward declarations
 namespace SQLite { class Database; }
 namespace codetldr { class LanguageRegistry; }
@@ -105,6 +111,12 @@ private:
     int wakeup_pipe_[2] = {-1, -1};  // [0]=read, [1]=write
     std::atomic<bool> stop_requested_{false};
     DaemonStatus current_status_;
+
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+    std::unique_ptr<ModelManager> model_manager_;
+    std::unique_ptr<VectorStore> vector_store_;
+    std::unique_ptr<EmbeddingWorker> embedding_worker_;
+#endif
 };
 
 } // namespace codetldr

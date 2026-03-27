@@ -85,6 +85,10 @@ target_link_libraries(codetldr_daemon
   PUBLIC codetldr_foundation codetldr_analysis codetldr_query
          nlohmann_json::nlohmann_json spdlog::spdlog CLI11::CLI11 efsw-static Threads::Threads)
 
+if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
+  target_link_libraries(codetldr_daemon PUBLIC codetldr_embedding)
+endif()
+
 add_library(codetldr_query
   src/query/search_engine.cpp
   src/query/context_builder.cpp
