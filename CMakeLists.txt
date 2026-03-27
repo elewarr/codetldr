@@ -100,6 +100,7 @@ target_link_libraries(codetldr-mcp PRIVATE codetldr_daemon)
 add_library(codetldr_lsp STATIC
   src/lsp/lsp_process.cpp
   src/lsp/lsp_framing.cpp
+  src/lsp/lsp_transport.cpp
 )
 target_include_directories(codetldr_lsp PUBLIC src)
 target_link_libraries(codetldr_lsp
