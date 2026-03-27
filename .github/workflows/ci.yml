@@ -58,4 +58,4 @@ jobs:
         run: cmake --build build --parallel
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure -LE agentic --timeout 60
+        run: ctest --test-dir build --output-on-failure -LE "agentic|integration" --timeout 60
