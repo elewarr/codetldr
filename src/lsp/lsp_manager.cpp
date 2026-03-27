@@ -2,6 +2,8 @@
 
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <fstream>
+#include <sstream>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -161,11 +163,16 @@ bool LspManager::try_spawn(ServerEntry& entry, const std::string& language) {
             e.state = LspServerState::kReady;
             spdlog::info("LspManager: '{}' reached kReady", language);
 
-            // Drain queued requests
+            // Drain queued requests first (before potential downgrade to kDegraded)
             auto queued = std::move(e.pending_requests);
             e.pending_requests.clear();
             for (auto& fn : queued) {
                 fn();
+            }
+
+            // Check compile_commands.json for clangd after queue drain
+            if (language == "cpp") {
+                check_clangd_compile_db(e);
             }
         });
 
@@ -335,6 +342,100 @@ void LspManager::check_timeouts() {
             entry.transport.check_timeouts();
         }
     }
+}
+
+std::string LspManager::file_uri(const std::filesystem::path& path) {
+    return "file://" + std::filesystem::absolute(path).string();
+}
+
+std::string LspManager::language_id_for(const std::filesystem::path& path) {
+    std::string ext = path.extension().string();
+    if (ext == ".cpp" || ext == ".cc" || ext == ".cxx" ||
+        ext == ".h"   || ext == ".hpp") return "cpp";
+    if (ext == ".c")   return "c";
+    if (ext == ".py")  return "python";
+    if (ext == ".ts")  return "typescript";
+    if (ext == ".tsx") return "typescriptreact";
+    if (ext == ".js")  return "javascript";
+    if (ext == ".jsx") return "javascriptreact";
+    return "plaintext";
+}
+
+void LspManager::check_clangd_compile_db(ServerEntry& entry) {
+    // Search in priority order:
+    // 1. project_root_ / compile_commands.json
+    // 2. project_root_ / build / compile_commands.json
+    // 3. project_root_ / cmake-build-* / compile_commands.json
+    auto check_path = [&](const std::filesystem::path& p) -> bool {
+        if (std::filesystem::exists(p)) {
+            spdlog::info("LspManager: clangd found compile_commands.json at {}",
+                         p.parent_path().string());
+            return true;
+        }
+        return false;
+    };
+
+    if (check_path(project_root_ / "compile_commands.json")) return;
+    if (check_path(project_root_ / "build" / "compile_commands.json")) return;
+
+    // Scan for cmake-build-* directories
+    std::error_code ec;
+    for (const auto& dir_entry : std::filesystem::directory_iterator(project_root_, ec)) {
+        if (!dir_entry.is_directory()) continue;
+        const std::string dirname = dir_entry.path().filename().string();
+        if (dirname.substr(0, 12) == "cmake-build-") {
+            if (check_path(dir_entry.path() / "compile_commands.json")) return;
+        }
+    }
+
+    // Not found — set degraded
+    entry.state = LspServerState::kDegraded;
+    spdlog::warn("LspManager: clangd degraded -- compile_commands.json not found. "
+                 "Expected at: {}/compile_commands.json (or build/ or cmake-build-*/)",
+                 project_root_.string());
+}
+
+void LspManager::ensure_document_open(const std::string& language,
+                                       const std::filesystem::path& file_path) {
+    auto it = servers_.find(language);
+    if (it == servers_.end()) return;
+    ServerEntry& entry = it->second;
+
+    // Only send didOpen when server is running
+    if (entry.state != LspServerState::kReady &&
+        entry.state != LspServerState::kIndexing &&
+        entry.state != LspServerState::kDegraded) {
+        return;
+    }
+
+    std::string uri = file_uri(file_path);
+
+    // Idempotent per session — skip if already opened
+    if (entry.opened_uris.count(uri)) return;
+    entry.opened_uris.insert(uri);
+
+    // Read file content
+    std::ifstream ifs(file_path);
+    if (!ifs.is_open()) {
+        entry.opened_uris.erase(uri);
+        return;
+    }
+    std::ostringstream ss;
+    ss << ifs.rdbuf();
+    std::string content = ss.str();
+
+    std::string lang_id = language_id_for(file_path);
+
+    entry.transport.send_notification("textDocument/didOpen", {
+        {"textDocument", {
+            {"uri",        uri},
+            {"languageId", lang_id},
+            {"version",    1},
+            {"text",       content}
+        }}
+    });
+
+    spdlog::debug("LspManager: didOpen '{}' for '{}'", uri, language);
 }
 
 bool LspManager::send_when_ready(const std::string& language, std::function<void()> action) {

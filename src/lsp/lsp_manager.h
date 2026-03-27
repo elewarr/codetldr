@@ -57,6 +57,10 @@ public:
     //   - Otherwise (kNotStarted, kUnavailable, unknown language): returns false.
     bool send_when_ready(const std::string& language, std::function<void()> action);
 
+    // Call before any textDocument/* query. Idempotent per session.
+    // Sends textDocument/didOpen with full file content if not already opened this session.
+    void ensure_document_open(const std::string& language, const std::filesystem::path& file_path);
+
     // Per-loop: check crashed processes, schedule restarts.
     // now parameter enables deterministic testing (defaults to steady_clock::now()).
     bool tick(Clock::time_point now = Clock::now());
@@ -98,6 +102,16 @@ private:
     // Build LSP initialize params per LSP 3.17 spec
     static nlohmann::json make_initialize_params(const std::string& language,
                                                   const std::filesystem::path& project_root);
+
+    // Probe filesystem for compile_commands.json after clangd reaches kReady.
+    // Sets entry state to kDegraded with warning if not found.
+    void check_clangd_compile_db(ServerEntry& entry);
+
+    // Map file extension to LSP languageId string.
+    static std::string language_id_for(const std::filesystem::path& path);
+
+    // Construct "file://" URI from an absolute or relative path.
+    static std::string file_uri(const std::filesystem::path& path);
 
     std::unordered_map<std::string, ServerEntry> servers_;
     std::unordered_map<int, std::string> fd_to_language_;
