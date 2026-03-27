@@ -16,7 +16,12 @@
 
 // Forward declarations
 namespace SQLite { class Database; }
-namespace codetldr { class LanguageRegistry; }
+namespace codetldr {
+    class LanguageRegistry;
+    class EmbeddingWorker;
+    class VectorStore;
+    class ModelManager;
+}
 
 namespace codetldr {
 
@@ -62,6 +67,10 @@ public:
     // Return current daemon status as a JSON object (for get_status RPC).
     nlohmann::json get_status_json();
 
+    // Return embedding pipeline stats as JSON (for get_embedding_stats RPC).
+    // Computes health checks: INDEX_INCONSISTENT (OBS-03), EXECUTION_PROVIDER_FALLBACK (OBS-04).
+    nlohmann::json get_embedding_stats_json();
+
     // Return per-language capability matrix (for get_project_overview and get_status RPC).
     nlohmann::json get_language_support() const;
 
@@ -105,6 +114,11 @@ private:
     int wakeup_pipe_[2] = {-1, -1};  // [0]=read, [1]=write
     std::atomic<bool> stop_requested_{false};
     DaemonStatus current_status_;
+
+    // Embedding pipeline handles — non-owning, may be null until Phase 15+ wires them
+    EmbeddingWorker* embedding_worker_ = nullptr;
+    VectorStore*     vector_store_     = nullptr;
+    ModelManager*    model_manager_    = nullptr;
 };
 
 } // namespace codetldr
