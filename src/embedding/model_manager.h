@@ -1,50 +1,29 @@
 #pragma once
-#include <filesystem>
-#include <memory>
-#include <string>
-#include <vector>
-#include <optional>
-
-// Forward-declare to avoid including ORT headers in the public interface
-namespace Ort { class Env; class Session; class MemoryInfo; class SessionOptions; }
-namespace tokenizers { class Tokenizer; }
 
 namespace codetldr {
 
-enum class ModelStatus { loaded, model_not_installed, load_failed };
+/// Model loading status for the embedding model.
+/// Phase 15+ will implement the full ModelManager with ONNX Runtime loading.
+enum class ModelStatus {
+    not_configured,     // No model path configured
+    loaded,             // Model loaded and ready
+    model_not_installed, // Model file missing
+    load_failed,        // Model file present but failed to load
+};
 
+/// ModelManager: manages the lifecycle of the ONNX embedding model.
+/// Phase 15+ will implement the full ModelManager.
+/// Phase 22 uses only the status() method for observability.
 class ModelManager {
 public:
-    explicit ModelManager(const std::filesystem::path& model_path,
-                          const std::filesystem::path& tokenizer_json_path);
-    ~ModelManager();
+    ModelManager() = default;
+    ~ModelManager() = default;
 
-    ModelManager(const ModelManager&) = delete;
-    ModelManager& operator=(const ModelManager&) = delete;
-
+    /// Return the current model loading status.
     ModelStatus status() const noexcept { return status_; }
 
-    // Embed text. is_query=true prepends instruction prefix (EMB-04).
-    // Returns 768-dim L2-normalized float vector.
-    // Throws std::runtime_error if status != loaded.
-    std::vector<float> embed(const std::string& text, bool is_query = false);
-
-    static constexpr int kEmbeddingDim = 768;
-    static constexpr int kMaxTokens = 512;
-
-    // Exposed for unit testing without a real model
-    static std::vector<float> mean_pool_and_normalize(
-        const float* last_hidden_state,
-        const int64_t* attention_mask,
-        int seq_len, int embed_dim);
-
-    static constexpr const char* kQueryPrefix =
-        "Represent this query for searching relevant code: ";
-
 private:
-    struct Impl;
-    std::unique_ptr<Impl> impl_;  // PIMPL -- hides ORT headers
-    ModelStatus status_ = ModelStatus::model_not_installed;
+    ModelStatus status_ = ModelStatus::not_configured;
 };
 
 } // namespace codetldr

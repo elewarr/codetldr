@@ -46,15 +46,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(CLI11)
 
-# toml++ 3.4.0 — header-only TOML config file parsing
-FetchContent_Declare(
-    tomlplusplus
-    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
-    GIT_TAG        v3.4.0
-    GIT_SHALLOW    TRUE
-)
-FetchContent_MakeAvailable(tomlplusplus)
-
 # ============================================================
 # Tree-sitter runtime v0.26.7
 # The tree-sitter repo does not provide a CMake build -- we

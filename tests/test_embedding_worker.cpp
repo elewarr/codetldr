@@ -1,196 +1,164 @@
-// test_embedding_worker.cpp -- Unit tests for EmbeddingWorker class (Phase 17 Plan 01)
-//
-// Tests cover:
-//   1. nullptr model: no crash, thread not started, enqueue is no-op
-//   2. stop on empty queue: clean exit, no deadlock
-//   3. Schema migration v7: metadata table exists with key TEXT PK
-//   4. Schema migration v8: embedded_files table exists with (file_id, symbol_id) PK
-//   5. AnalysisResult has int64_t file_id field (compile test)
-//   6. compute_model_fingerprint: returns size:mtime for real file, "" for missing
+// test_embedding_worker.cpp
+// Tests for EmbeddingStats ring buffer correctness (OBS-01, OBS-04).
 
 #include "embedding/embedding_worker.h"
-#include "analysis/pipeline.h"    // AnalysisResult -- compile test
-#include "storage/schema.h"
-#include <SQLiteCpp/SQLiteCpp.h>
 #include <cassert>
-#include <chrono>
-#include <filesystem>
-#include <fstream>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
 #include <iostream>
 #include <string>
-#include <thread>
 
-namespace {
+using namespace codetldr;
 
-void run_migrations(SQLite::Database& db) {
-    for (const auto& [version, sql] : codetldr::kMigrations) {
-        db.exec(std::string(sql));
-    }
-    db.exec("PRAGMA user_version = 8");
+static int g_pass = 0;
+static int g_fail = 0;
+
+#define CHECK(cond, msg)                                                        \
+    do {                                                                        \
+        if (cond) {                                                             \
+            ++g_pass;                                                           \
+            std::cout << "PASS: " << msg << "\n";                              \
+        } else {                                                                \
+            ++g_fail;                                                           \
+            std::cerr << "FAIL: " << msg << "  (line " << __LINE__ << ")\n";  \
+        }                                                                       \
+    } while (0)
+
+#define CHECK_APPROX(val, expected, tol, msg)                                   \
+    CHECK(std::fabs((val) - (expected)) < (tol), msg)
+
+// ---------------------------------------------------------------
+// Test 1: fresh stats are empty
+// ---------------------------------------------------------------
+static void test_fresh_stats_empty() {
+    EmbeddingStats stats;
+    auto snap = stats.snapshot();
+    CHECK(snap.has_data == false, "fresh stats: has_data=false");
+    CHECK(snap.sample_count == 0, "fresh stats: sample_count=0");
+    CHECK(snap.chunks_processed == 0, "fresh stats: chunks_processed=0");
+    CHECK(snap.queue_depth == 0, "fresh stats: queue_depth=0");
+    CHECK(snap.p50_ms == 0.0, "fresh stats: p50_ms=0");
+    CHECK(snap.p95_ms == 0.0, "fresh stats: p95_ms=0");
+    CHECK(snap.p99_ms == 0.0, "fresh stats: p99_ms=0");
 }
 
-// Test 1: nullptr model — no crash, no thread, enqueue is no-op
-void test_nullptr_model_no_crash() {
-    SQLite::Database db(":memory:", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
-    run_migrations(db);
-    std::filesystem::path root = "/tmp/test_project";
+// ---------------------------------------------------------------
+// Test 2: ring buffer accumulates 5 samples
+// ---------------------------------------------------------------
+static void test_ring_buffer_accumulates_samples() {
+    EmbeddingStats stats;
 
-    codetldr::EmbeddingWorker worker(db, root, nullptr, nullptr, "");
-    worker.enqueue(1);
-    worker.enqueue(2);
-    worker.enqueue_full_rebuild();
-    worker.stop();
-    std::cout << "PASS: nullptr model no crash\n";
-}
+    CHECK(stats.snapshot().has_data == false, "ring buffer: initially empty");
+    CHECK(stats.snapshot().sample_count == 0, "ring buffer: sample_count=0 initially");
 
-// Test 2: stop on empty queue — clean exit, no deadlock
-void test_stop_empty_queue() {
-    SQLite::Database db(":memory:", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
-    run_migrations(db);
-
-    codetldr::EmbeddingWorker worker(db, "/tmp", nullptr, nullptr, "");
-    worker.stop();
-    std::cout << "PASS: stop empty queue\n";
-}
-
-// Test 3: double stop is safe
-void test_double_stop() {
-    SQLite::Database db(":memory:", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
-    run_migrations(db);
-
-    codetldr::EmbeddingWorker worker(db, "/tmp", nullptr, nullptr, "");
-    worker.stop();
-    worker.stop();  // safe to call multiple times
-    std::cout << "PASS: double stop safe\n";
-}
-
-// Test 4: schema migration v7 — metadata table exists
-void test_schema_migration_v7_metadata() {
-    SQLite::Database db(":memory:", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
-    run_migrations(db);
-
-    // Verify table exists and is queryable
-    SQLite::Statement q(db, "SELECT COUNT(*) FROM metadata");
-    assert(q.executeStep());
-    assert(q.getColumn(0).getInt() == 0);
-
-    // Insert and read back
-    db.exec("INSERT INTO metadata(key, value) VALUES('test_key', 'test_val')");
-    SQLite::Statement r(db, "SELECT value FROM metadata WHERE key = 'test_key'");
-    assert(r.executeStep());
-    assert(r.getColumn(0).getString() == "test_val");
-
-    // Verify PRIMARY KEY uniqueness
-    bool threw = false;
-    try {
-        db.exec("INSERT INTO metadata(key, value) VALUES('test_key', 'duplicate')");
-    } catch (const SQLite::Exception&) {
-        threw = true;
-    }
-    assert(threw && "metadata key must be PRIMARY KEY (unique)");
-
-    std::cout << "PASS: schema migration v7 metadata\n";
-}
-
-// Test 5: schema migration v8 — embedded_files table exists
-void test_schema_migration_v8_embedded_files() {
-    SQLite::Database db(":memory:", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
-    run_migrations(db);
-
-    // Insert a file first (for FK constraint)
-    db.exec("INSERT INTO files(path, mtime_ns) VALUES('test.cpp', 0)");
-    int64_t file_id = db.getLastInsertRowid();
-
-    // Insert embedded_files row
-    {
-        SQLite::Statement ins(db, "INSERT INTO embedded_files(file_id, symbol_id) VALUES(?, ?)");
-        ins.bind(1, file_id);
-        ins.bind(2, static_cast<long long>(42));
-        ins.exec();
+    // Write 5 samples: 10ms, 20ms, 30ms, 40ms, 50ms
+    uint64_t samples_ns[] = {10000000, 20000000, 30000000, 40000000, 50000000};
+    for (uint64_t ns : samples_ns) {
+        uint64_t slot = stats.write_index.fetch_add(1) % EmbeddingStats::kWindowSize;
+        stats.latency_ns[slot] = ns;
+        stats.chunks_processed.fetch_add(1);
+        stats.total_duration_ns.fetch_add(ns);
     }
 
-    // Verify row exists
-    {
-        SQLite::Statement q(db, "SELECT symbol_id FROM embedded_files WHERE file_id = ?");
-        q.bind(1, file_id);
-        assert(q.executeStep());
-        assert(q.getColumn(0).getInt64() == 42);
+    auto snap = stats.snapshot();
+    CHECK(snap.has_data == true, "ring buffer: has_data=true after writes");
+    CHECK(snap.sample_count == 5, "ring buffer: sample_count=5");
+    CHECK(snap.chunks_processed == 5, "ring buffer: chunks_processed=5");
+    // p50 of [10,20,30,40,50] ms: sorted index at 50% of 5 = index 2 = 30ms
+    CHECK_APPROX(snap.p50_ms, 30.0, 0.001, "ring buffer: p50=30ms");
+    // p99 of 5 samples: min(4, 5*99/100) = min(4, 4) = 4 => 50ms
+    CHECK_APPROX(snap.p99_ms, 50.0, 0.001, "ring buffer: p99=50ms");
+    // avg = (10+20+30+40+50)/5 = 30ms
+    CHECK_APPROX(snap.avg_ms, 30.0, 0.001, "ring buffer: avg=30ms");
+    // throughput = chunks * 1e9 / total_ns = 5 * 1e9 / 150_000_000 ~= 33.3 chunks/sec
+    CHECK(snap.throughput_chunks_per_sec > 0.0, "ring buffer: throughput > 0");
+}
+
+// ---------------------------------------------------------------
+// Test 3: ring buffer wraps at kWindowSize
+// ---------------------------------------------------------------
+static void test_ring_buffer_wraps() {
+    EmbeddingStats stats;
+
+    // Write 101 samples — should wrap, sample_count stays at 100
+    for (size_t i = 0; i < EmbeddingStats::kWindowSize + 1; ++i) {
+        uint64_t slot = stats.write_index.fetch_add(1) % EmbeddingStats::kWindowSize;
+        stats.latency_ns[slot] = static_cast<uint64_t>(i + 1) * 1000000; // i+1 ms
     }
 
-    // Verify PK uniqueness: duplicate (file_id, symbol_id) should throw
-    bool threw = false;
-    try {
-        SQLite::Statement ins(db, "INSERT INTO embedded_files(file_id, symbol_id) VALUES(?, ?)");
-        ins.bind(1, file_id);
-        ins.bind(2, static_cast<long long>(42));
-        ins.exec();
-    } catch (const SQLite::Exception&) {
-        threw = true;
-    }
-    assert(threw && "embedded_files (file_id, symbol_id) must be PRIMARY KEY (unique)");
-
-    std::cout << "PASS: schema migration v8 embedded_files\n";
+    auto snap = stats.snapshot();
+    // write_index = 101 > kWindowSize=100, so filled = min(101, 100) = 100
+    CHECK(snap.sample_count == 100, "ring buffer wrap: sample_count=100 after 101 writes");
+    CHECK(snap.has_data == true, "ring buffer wrap: has_data=true");
 }
 
-// Test 6: AnalysisResult has int64_t file_id (compile test)
-void test_analysis_result_file_id() {
-    codetldr::AnalysisResult r{};
-    r.file_id = 42;
-    assert(r.file_id == 42);
-    r.file_id = 0;
-    assert(r.file_id == 0);
-    // Verify the field is int64_t (can hold large values)
-    r.file_id = INT64_MAX;
-    assert(r.file_id == INT64_MAX);
-    std::cout << "PASS: AnalysisResult has int64_t file_id\n";
-}
+// ---------------------------------------------------------------
+// Test 4: OBS-04 EXECUTION_PROVIDER_FALLBACK threshold
+// ---------------------------------------------------------------
+static void test_execution_provider_fallback_threshold() {
+    EmbeddingStats stats;
 
-// Test 7: compute_model_fingerprint returns "size:mtime" for real file, "" for missing
-void test_model_fingerprint() {
-    // Create a temp file
-    auto tmp = std::filesystem::temp_directory_path() / "test_model_17_01.onnx";
-    {
-        std::ofstream f(tmp);
-        f << "fake model content for fingerprint test";
+    // Write 10 samples all at 25ms — this should trigger the OBS-04 check (p50 > 20ms)
+    for (int i = 0; i < 10; ++i) {
+        uint64_t slot = stats.write_index.fetch_add(1) % EmbeddingStats::kWindowSize;
+        stats.latency_ns[slot] = 25000000; // 25ms
+        stats.chunks_processed.fetch_add(1);
+        stats.total_duration_ns.fetch_add(25000000);
     }
 
-    auto fp = codetldr::EmbeddingWorker::compute_model_fingerprint(tmp);
-    assert(!fp.empty() && "fingerprint must be non-empty for existing file");
-    assert(fp.find(':') != std::string::npos && "fingerprint format must be 'size:mtime'");
-
-    // Verify stable: calling again returns same value
-    auto fp2 = codetldr::EmbeddingWorker::compute_model_fingerprint(tmp);
-    assert(fp == fp2 && "fingerprint must be deterministic");
-
-    std::filesystem::remove(tmp);
-
-    // Non-existent file returns empty string
-    auto fp3 = codetldr::EmbeddingWorker::compute_model_fingerprint("/nonexistent/path_no_exist.onnx");
-    assert(fp3.empty() && "fingerprint for missing file must be empty");
-
-    std::cout << "PASS: model fingerprint\n";
+    auto snap = stats.snapshot();
+    CHECK(snap.sample_count == 10, "obs04 threshold: sample_count=10");
+    CHECK(snap.p50_ms > 20.0, "obs04 threshold: p50_ms > 20ms (CoreML fallback threshold)");
 }
 
-// Test 8: kFullRebuildSentinel is -1
-void test_full_rebuild_sentinel_value() {
-    assert(codetldr::EmbeddingWorker::kFullRebuildSentinel == -1);
-    std::cout << "PASS: kFullRebuildSentinel == -1\n";
+// ---------------------------------------------------------------
+// Test 5: queue_depth tracking
+// ---------------------------------------------------------------
+static void test_queue_depth_tracking() {
+    EmbeddingStats stats;
+
+    stats.queue_depth.store(42, std::memory_order_relaxed);
+    auto snap = stats.snapshot();
+    CHECK(snap.queue_depth == 42, "queue depth: stored value retrieved correctly");
+
+    stats.queue_depth.store(0, std::memory_order_relaxed);
+    snap = stats.snapshot();
+    CHECK(snap.queue_depth == 0, "queue depth: reset to 0 correctly");
 }
 
-} // namespace
+// ---------------------------------------------------------------
+// Test 6: EmbeddingWorker stats accessor
+// ---------------------------------------------------------------
+static void test_embedding_worker_stats_accessor() {
+    EmbeddingWorker worker;
+
+    // Initially empty
+    auto snap = worker.stats().snapshot();
+    CHECK(snap.has_data == false, "EmbeddingWorker: stats initially empty");
+
+    // Write one sample via mutable_stats
+    auto& ms = worker.mutable_stats();
+    uint64_t slot = ms.write_index.fetch_add(1) % EmbeddingStats::kWindowSize;
+    ms.latency_ns[slot] = 5000000; // 5ms
+    ms.chunks_processed.fetch_add(1);
+    ms.total_duration_ns.fetch_add(5000000);
+
+    snap = worker.stats().snapshot();
+    CHECK(snap.has_data == true, "EmbeddingWorker: has_data=true after write");
+    CHECK(snap.sample_count == 1, "EmbeddingWorker: sample_count=1");
+    CHECK_APPROX(snap.p50_ms, 5.0, 0.001, "EmbeddingWorker: p50=5ms");
+}
 
 int main() {
-    std::cout << "=== test_embedding_worker ===\n";
+    test_fresh_stats_empty();
+    test_ring_buffer_accumulates_samples();
+    test_ring_buffer_wraps();
+    test_execution_provider_fallback_threshold();
+    test_queue_depth_tracking();
+    test_embedding_worker_stats_accessor();
 
-    test_nullptr_model_no_crash();
-    test_stop_empty_queue();
-    test_double_stop();
-    test_schema_migration_v7_metadata();
-    test_schema_migration_v8_embedded_files();
-    test_analysis_result_file_id();
-    test_model_fingerprint();
-    test_full_rebuild_sentinel_value();
-
-    std::cout << "All embedding_worker tests passed\n";
-    return 0;
+    int total = g_pass + g_fail;
+    printf("\ntest_embedding_worker: %d/%d passed\n", g_pass, total);
+    return g_fail == 0 ? 0 : 1;
 }

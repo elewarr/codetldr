@@ -2,7 +2,6 @@
 #include "daemon/daemonize.h"
 #include "common/logging.h"
 #include "config/project_dir.h"
-#include "query/hybrid_search_engine.h"
 #include "storage/database.h"
 #include "analysis/tree_sitter/language_registry.h"
 
@@ -10,12 +9,10 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
-#include <toml++/toml.hpp>
 
 #include <unistd.h>
 
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -57,24 +54,6 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        // Parse config.toml for optional tuning (non-fatal if missing)
-        codetldr::HybridSearchConfig hybrid_cfg;
-        fs::path config_path = codetldr_dir / "config.toml";
-        if (fs::exists(config_path)) {
-            try {
-                auto config = toml::parse_file(config_path.string());
-                if (auto search = config["search"].as_table()) {
-                    if (auto k = (*search)["hybrid_k"].value<int>())             hybrid_cfg.rrf_k              = *k;
-                    if (auto m = (*search)["candidate_multiplier"].value<int>()) hybrid_cfg.candidate_multiplier = *m;
-                    if (auto b = (*search)["hybrid_bm25_limit"].value<int>())    hybrid_cfg.bm25_limit         = *b;
-                    if (auto v = (*search)["hybrid_vec_limit"].value<int>())     hybrid_cfg.vec_limit          = *v;
-                    if (auto r = (*search)["hybrid_return_limit"].value<int>())  hybrid_cfg.return_limit       = *r;
-                }
-            } catch (const std::exception& ex) {
-                std::cerr << "Warning: failed to parse config.toml: " << ex.what() << "\n";
-            }
-        }
-
         // Open database before daemonizing (validates it opens cleanly)
         auto db = codetldr::Database::open(db_path);
 
@@ -108,9 +87,8 @@ int main(int argc, char* argv[]) {
         spdlog::info("Socket: {}", sock_path.string());
         spdlog::info("PID: {}", static_cast<int>(::getpid()));
 
-        // Create and run coordinator with parsed hybrid search config
-        codetldr::Coordinator coordinator(project_root, db.raw(), registry, sock_path,
-                                          std::chrono::seconds(idle_timeout), hybrid_cfg);
+        // Create and run coordinator
+        codetldr::Coordinator coordinator(project_root, db.raw(), registry, sock_path);
         coordinator.run();
 
         spdlog::info("codetldr-daemon stopped cleanly");

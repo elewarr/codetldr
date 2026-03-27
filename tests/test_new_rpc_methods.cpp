@@ -3,13 +3,18 @@
 // Tests the underlying ContextBuilder methods (find_symbol, get_caller_names,
 // get_callee_names) and the query logic used by the 4 new methods, using
 // an in-memory SQLite database with the full schema.
+// Also tests get_embedding_stats JSON shape and INDEX_INCONSISTENT health check (OBS-02, OBS-03).
 
 #include "storage/database.h"
 #include "query/search_engine.h"
 #include "query/context_builder.h"
+#include "embedding/embedding_worker.h"
+#include "embedding/model_manager.h"
+#include "embedding/vector_store.h"
 #include <nlohmann/json.hpp>
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <cassert>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -193,6 +198,88 @@ static json simulate_get_project_overview(SQLite::Database& db) {
     return result;
 }
 
+// ---------------------------------------------------------------
+// Simulate get_embedding_stats logic (mirrors Coordinator::get_embedding_stats_json)
+// ---------------------------------------------------------------
+static json simulate_get_embedding_stats(SQLite::Database& db,
+                                          codetldr::EmbeddingWorker* worker,
+                                          codetldr::VectorStore* vector_store,
+                                          codetldr::ModelManager* model_manager) {
+    json j;
+
+    // Model info
+    std::string model_name = "none";
+    std::string model_status_str = "not_configured";
+    if (model_manager) {
+        switch (model_manager->status()) {
+            case codetldr::ModelStatus::loaded:             model_status_str = "loaded"; break;
+            case codetldr::ModelStatus::model_not_installed: model_status_str = "not_installed"; break;
+            case codetldr::ModelStatus::load_failed:        model_status_str = "load_failed"; break;
+            case codetldr::ModelStatus::not_configured:     model_status_str = "not_configured"; break;
+        }
+        model_name = "configured";
+    }
+    j["model_name"]   = model_name;
+    j["model_status"] = model_status_str;
+
+    // Latency metrics
+    if (worker) {
+        auto snap = worker->stats().snapshot();
+        j["latency_p50_ms"]            = snap.p50_ms;
+        j["latency_p95_ms"]            = snap.p95_ms;
+        j["latency_p99_ms"]            = snap.p99_ms;
+        j["latency_avg_ms"]            = snap.avg_ms;
+        j["throughput_chunks_per_sec"] = snap.throughput_chunks_per_sec;
+        j["queue_depth"]               = snap.queue_depth;
+        j["chunks_embedded_total"]     = snap.chunks_processed;
+        j["sample_count"]              = snap.sample_count;
+    } else {
+        j["latency_p50_ms"]            = 0.0;
+        j["latency_p95_ms"]            = 0.0;
+        j["latency_p99_ms"]            = 0.0;
+        j["latency_avg_ms"]            = 0.0;
+        j["throughput_chunks_per_sec"] = 0.0;
+        j["queue_depth"]               = (int64_t)0;
+        j["chunks_embedded_total"]     = (int64_t)0;
+        j["sample_count"]              = (int64_t)0;
+    }
+
+    // FAISS index stats
+    int64_t faiss_count = vector_store ? vector_store->ntotal() : 0;
+    j["faiss_vector_count"] = faiss_count;
+
+    // SQLite embedded count
+    int64_t sqlite_count = 0;
+    try {
+        SQLite::Statement q(db, "SELECT COUNT(DISTINCT symbol_id) FROM embedded_files");
+        if (q.executeStep()) {
+            sqlite_count = q.getColumn(0).getInt64();
+        }
+    } catch (...) {}
+    j["sqlite_embedded_count"] = sqlite_count;
+
+    // Health checks
+    std::string health = "ok";
+    json degraded = json(nullptr);
+
+    if (faiss_count > 0 || sqlite_count > 0) {
+        int64_t delta = std::abs(faiss_count - sqlite_count);
+        int64_t threshold = std::max((int64_t)10,
+                                     sqlite_count > 0 ? sqlite_count * 5 / 100 : (int64_t)10);
+        if (delta > threshold) {
+            health = "degraded";
+            degraded = "INDEX_INCONSISTENT: faiss=" + std::to_string(faiss_count)
+                     + " sqlite=" + std::to_string(sqlite_count)
+                     + " (delta=" + std::to_string(delta) + ")";
+        }
+    }
+
+    j["health"]   = health;
+    j["degraded"] = degraded;
+
+    return j;
+}
+
 int main() {
     const fs::path test_dir = fs::temp_directory_path() / "codetldr_test_new_rpc";
     fs::remove_all(test_dir);
@@ -323,6 +410,61 @@ int main() {
         auto callers_compute = builder.get_caller_names(sym_compute);
         CHECK(callers_compute.size() == 1 && callers_compute[0] == "run",
               "get_caller_names: compute called by run");
+    }
+
+    // ---- Test 9: get_embedding_stats returns expected JSON shape (OBS-02) ----
+    {
+        auto result = simulate_get_embedding_stats(db, nullptr, nullptr, nullptr);
+        CHECK(result.contains("model_status"),            "get_embedding_stats: has model_status");
+        CHECK(result.contains("latency_p50_ms"),          "get_embedding_stats: has latency_p50_ms");
+        CHECK(result.contains("latency_p95_ms"),          "get_embedding_stats: has latency_p95_ms");
+        CHECK(result.contains("latency_p99_ms"),          "get_embedding_stats: has latency_p99_ms");
+        CHECK(result.contains("throughput_chunks_per_sec"), "get_embedding_stats: has throughput_chunks_per_sec");
+        CHECK(result.contains("queue_depth"),             "get_embedding_stats: has queue_depth");
+        CHECK(result.contains("faiss_vector_count"),      "get_embedding_stats: has faiss_vector_count");
+        CHECK(result.contains("sqlite_embedded_count"),   "get_embedding_stats: has sqlite_embedded_count");
+        CHECK(result.contains("sample_count"),            "get_embedding_stats: has sample_count");
+        CHECK(result.contains("health"),                  "get_embedding_stats: has health");
+        CHECK(result.contains("degraded"),                "get_embedding_stats: has degraded");
+        CHECK(result["health"].get<std::string>() == "ok", "get_embedding_stats: health=ok when no data");
+        CHECK(result["model_status"].get<std::string>() == "not_configured",
+              "get_embedding_stats: model_status=not_configured when no model manager");
+    }
+
+    // ---- Test 10: get_embedding_stats INDEX_INCONSISTENT when sqlite_count > 10 and faiss=0 (OBS-03) ----
+    {
+        // Insert symbols with unique IDs so COUNT(DISTINCT symbol_id) grows
+        // We need sqlite_count > 10 distinct symbol_ids so that delta > threshold=10
+        // Insert 15 new symbols in file_a and embed them (FAISS has 0 vectors)
+        std::vector<int64_t> extra_syms;
+        for (int i = 0; i < 15; ++i) {
+            int64_t sym_id = insert_symbol(db, file_a, "function",
+                                           "obs_test_sym_" + std::to_string(i),
+                                           "void obs_test_sym_" + std::to_string(i) + "()",
+                                           "", 100 + i, 110 + i);
+            extra_syms.push_back(sym_id);
+        }
+        // Insert 1 row per symbol into embedded_files so COUNT(DISTINCT symbol_id) = 15
+        for (int64_t sym_id : extra_syms) {
+            SQLite::Statement ins(db,
+                "INSERT INTO embedded_files(symbol_id, file_id) VALUES(?, ?)");
+            ins.bind(1, sym_id);
+            ins.bind(2, static_cast<int64_t>(file_a));
+            ins.exec();
+        }
+
+        // null vector_store means faiss_count=0, sqlite_count=15 distinct symbols
+        // delta = |0 - 15| = 15, threshold = max(10, 15*5/100) = max(10, 0) = 10
+        // 15 > 10 => INDEX_INCONSISTENT
+        auto result = simulate_get_embedding_stats(db, nullptr, nullptr, nullptr);
+        CHECK(result["health"].get<std::string>() == "degraded",
+              "get_embedding_stats INDEX_INCONSISTENT: health=degraded");
+        CHECK(result.contains("degraded") && result["degraded"].is_string(),
+              "get_embedding_stats INDEX_INCONSISTENT: degraded is a string");
+        if (result["degraded"].is_string()) {
+            CHECK(result["degraded"].get<std::string>().find("INDEX_INCONSISTENT") != std::string::npos,
+                  "get_embedding_stats INDEX_INCONSISTENT: message contains INDEX_INCONSISTENT");
+        }
     }
 
     fs::remove_all(test_dir);

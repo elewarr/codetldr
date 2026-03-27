@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 
 // ---------------------------------------------------------------------------
 // Helper: make_tools_list_response
-// Build all 8 MCP tool definitions with inputSchema and wrap in JSON-RPC envelope.
+// Build all 9 MCP tool definitions with inputSchema and wrap in JSON-RPC envelope.
 // ---------------------------------------------------------------------------
 static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
     nlohmann::json tools = nlohmann::json::array();
@@ -129,6 +129,15 @@ static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
         }}
     });
 
+    tools.push_back({
+        {"name", "get_embedding_stats"},
+        {"description", "Get embedding pipeline observability metrics: model status, p50/p95/p99 inference latency, throughput (chunks/sec), queue depth, FAISS index size vs SQLite count, and a health status field. Health is 'ok' or 'degraded' with a human-readable reason. Returns zeros when no embeddings have been processed yet."},
+        {"inputSchema", {
+            {"type", "object"},
+            {"additionalProperties", false}
+        }}
+    });
+
     return nlohmann::json{
         {"jsonrpc", "2.0"},
         {"id",      id},
@@ -172,6 +181,8 @@ static nlohmann::json dispatch_tool_call(const std::string& tool_name,
             daemon_resp = client.call("get_control_flow", arguments);
         } else if (tool_name == "get_data_flow") {
             daemon_resp = client.call("get_data_flow", arguments);
+        } else if (tool_name == "get_embedding_stats") {
+            daemon_resp = client.call("get_embedding_stats", nlohmann::json::object());
         } else {
             return {
                 {"content", {{{"type","text"},{"text","Unknown tool: " + tool_name}}}},

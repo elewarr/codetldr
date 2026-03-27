@@ -1,60 +1,20 @@
 #include "daemon/request_router.h"
 #include "daemon/coordinator.h"
-#include "query/hybrid_search_engine.h"
+#include "query/search_engine.h"
 #include "query/context_builder.h"
-#include <toml++/toml.hpp>
 #include <unistd.h>
 
 namespace codetldr {
 
-// Legacy constructor: derive db_path from the open SQLite connection's filename.
-// HybridSearchEngine opens its own read-only connection from the same path.
-// When db is in-memory (":memory:"), HybridSearchEngine falls back to FTS5 via db.
 RequestRouter::RequestRouter(Coordinator& coordinator, SQLite::Database& db)
     : coordinator_(coordinator)
     , db_(db)
-    , hybrid_engine_(std::make_unique<HybridSearchEngine>(
-          std::filesystem::path(db.getFilename()),
-          /*model=*/nullptr,
-          /*store=*/nullptr))
+    , search_engine_(std::make_unique<SearchEngine>(db))
     , context_builder_(std::make_unique<ContextBuilder>(db))
 {}
 
-// Full constructor with hybrid search support.
-RequestRouter::RequestRouter(Coordinator& coordinator,
-                              SQLite::Database& db,
-                              const std::filesystem::path& db_path,
-                              ModelManager* model,
-                              VectorStore* store,
-                              HybridSearchConfig hybrid_config,
-                              std::filesystem::path config_path)
-    : coordinator_(coordinator)
-    , db_(db)
-    , hybrid_engine_(std::make_unique<HybridSearchEngine>(db_path, model, store, hybrid_config))
-    , context_builder_(std::make_unique<ContextBuilder>(db))
-    , config_path_(std::move(config_path))
-{}
-
-// Destructor defined here where complete types are available.
+// Destructor defined here where SearchEngine and ContextBuilder are complete types.
 RequestRouter::~RequestRouter() = default;
-
-void RequestRouter::reload_search_config() {
-    if (config_path_.empty() || !std::filesystem::exists(config_path_)) return;
-    try {
-        auto config = toml::parse_file(config_path_.string());
-        HybridSearchConfig new_cfg;
-        if (auto search = config["search"].as_table()) {
-            if (auto k = (*search)["hybrid_k"].value<int>())               new_cfg.rrf_k              = *k;
-            if (auto m = (*search)["candidate_multiplier"].value<int>())   new_cfg.candidate_multiplier = *m;
-            if (auto b = (*search)["hybrid_bm25_limit"].value<int>())      new_cfg.bm25_limit         = *b;
-            if (auto v = (*search)["hybrid_vec_limit"].value<int>())       new_cfg.vec_limit          = *v;
-            if (auto r = (*search)["hybrid_return_limit"].value<int>())    new_cfg.return_limit       = *r;
-        }
-        hybrid_engine_->set_config(new_cfg);
-    } catch (...) {
-        // Non-fatal: keep current config on parse failure
-    }
-}
 
 nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
     nlohmann::json response;
@@ -90,17 +50,13 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
     } else if (method == "search_text") {
         try {
             const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
-            std::string query    = params.value("query", "");
-            std::string language = params.value("language", "");
+            std::string query = params.value("query", "");
             int limit = params.value("limit", 20);
 
-            reload_search_config();
-            auto hybrid_result = hybrid_engine_->search_text(query, language, limit);
+            auto results = search_engine_->search_text(query, limit);
 
-            nlohmann::json result_obj;
-            result_obj["search_mode"] = hybrid_result.search_mode;
             nlohmann::json arr = nlohmann::json::array();
-            for (const auto& r : hybrid_result.results) {
+            for (const auto& r : results) {
                 nlohmann::json item;
                 item["symbol_id"]     = r.symbol_id;
                 item["name"]          = r.name;
@@ -110,11 +66,9 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
                 item["file_path"]     = r.file_path;
                 item["line_start"]    = r.line_start;
                 item["rank"]          = r.rank;
-                item["provenance"]    = r.provenance;
                 arr.push_back(std::move(item));
             }
-            result_obj["results"] = std::move(arr);
-            response["result"] = std::move(result_obj);
+            response["result"] = std::move(arr);
         } catch (const std::exception& e) {
             nlohmann::json error;
             error["code"]    = -32000;
@@ -125,18 +79,14 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
     } else if (method == "search_symbols") {
         try {
             const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
-            std::string query    = params.value("query", "");
-            std::string kind     = params.value("kind", "");
-            std::string language = params.value("language", "");
+            std::string query = params.value("query", "");
+            std::string kind  = params.value("kind", "");
             int limit = params.value("limit", 20);
 
-            reload_search_config();
-            auto hybrid_result = hybrid_engine_->search_symbols(query, kind, language, limit);
+            auto results = search_engine_->search_symbols(query, kind, limit);
 
-            nlohmann::json result_obj;
-            result_obj["search_mode"] = hybrid_result.search_mode;
             nlohmann::json arr = nlohmann::json::array();
-            for (const auto& r : hybrid_result.results) {
+            for (const auto& r : results) {
                 nlohmann::json item;
                 item["symbol_id"]     = r.symbol_id;
                 item["name"]          = r.name;
@@ -146,11 +96,9 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
                 item["file_path"]     = r.file_path;
                 item["line_start"]    = r.line_start;
                 item["rank"]          = r.rank;
-                item["provenance"]    = r.provenance;
                 arr.push_back(std::move(item));
             }
-            result_obj["results"] = std::move(arr);
-            response["result"] = std::move(result_obj);
+            response["result"] = std::move(arr);
         } catch (const std::exception& e) {
             nlohmann::json error;
             error["code"]    = -32000;
@@ -415,6 +363,16 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
 
                 response["result"] = std::move(result);
             }
+        } catch (const std::exception& e) {
+            nlohmann::json error;
+            error["code"]    = -32000;
+            error["message"] = e.what();
+            response["error"] = error;
+        }
+
+    } else if (method == "get_embedding_stats") {
+        try {
+            response["result"] = coordinator_.get_embedding_stats_json();
         } catch (const std::exception& e) {
             nlohmann::json error;
             error["code"]    = -32000;
