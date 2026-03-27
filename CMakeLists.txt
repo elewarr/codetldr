@@ -15,6 +15,13 @@ option(CODETLDR_ENABLE_SEMANTIC_SEARCH
   "Enable semantic search (requires ONNX Runtime, FAISS, Rust toolchain)"
   OFF)
 
+# codetldr_embedding_stats: always-on EmbeddingStats ring buffer and stubs.
+# Available without CODETLDR_ENABLE_SEMANTIC_SEARCH for observability (Phase 22+).
+add_library(codetldr_embedding_stats STATIC
+  src/embedding/embedding_worker.cpp
+)
+target_include_directories(codetldr_embedding_stats PUBLIC src)
+
 if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
   find_program(RUSTC rustc REQUIRED
     DOC "Rust compiler (rustc) is required to build tokenizers-cpp. Install via: curl https://sh.rustup.rs -sSf | sh")
@@ -24,7 +31,7 @@ if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
     src/embedding/placeholder.cpp
   )
   target_link_libraries(codetldr_embedding
-    PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp)
+    PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp codetldr_embedding_stats)
   target_include_directories(codetldr_embedding PUBLIC src)
   target_compile_definitions(codetldr_embedding
     PUBLIC CODETLDR_ENABLE_SEMANTIC_SEARCH)
@@ -70,7 +77,7 @@ add_library(codetldr_daemon
 )
 target_include_directories(codetldr_daemon PUBLIC src)
 target_link_libraries(codetldr_daemon
-  PUBLIC codetldr_foundation codetldr_analysis codetldr_query
+  PUBLIC codetldr_foundation codetldr_analysis codetldr_query codetldr_embedding_stats
          nlohmann_json::nlohmann_json spdlog::spdlog CLI11::CLI11 efsw-static Threads::Threads)
 
 add_library(codetldr_query
@@ -165,8 +172,12 @@ target_link_libraries(test_ignore_filter PRIVATE codetldr_daemon)
 add_test(NAME ignore_filter COMMAND test_ignore_filter)
 
 add_executable(test_new_rpc_methods tests/test_new_rpc_methods.cpp)
-target_link_libraries(test_new_rpc_methods PRIVATE codetldr_daemon codetldr_query codetldr_foundation)
+target_link_libraries(test_new_rpc_methods PRIVATE codetldr_daemon codetldr_query codetldr_foundation codetldr_embedding_stats)
 add_test(NAME new_rpc_methods COMMAND test_new_rpc_methods)
+
+add_executable(test_embedding_worker tests/test_embedding_worker.cpp)
+target_link_libraries(test_embedding_worker PRIVATE codetldr_embedding_stats)
+add_test(NAME embedding_worker COMMAND test_embedding_worker)
 
 add_executable(test_cli_init tests/test_cli_init.cpp)
 target_link_libraries(test_cli_init PRIVATE codetldr_daemon codetldr_analysis codetldr_foundation)

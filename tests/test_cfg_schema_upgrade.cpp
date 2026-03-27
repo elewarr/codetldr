@@ -77,12 +77,12 @@ int main() {
     }
     // raw_db goes out of scope here — file closed before Database::open()
 
-    // === Test 1: Database::open() upgrades v4 -> v6 transparently ===
+    // === Test 1: Database::open() upgrades v4 -> v7 transparently ===
     auto db = codetldr::Database::open(db_path);
 
-    assert_true(db.schema_version() == 6,
-        "schema_version should be 6 after upgrade, got " + std::to_string(db.schema_version()));
-    std::cout << "PASS: schema_version() == 6 after v4 -> v6 upgrade\n";
+    assert_true(db.schema_version() == 7,
+        "schema_version should be 7 after upgrade, got " + std::to_string(db.schema_version()));
+    std::cout << "PASS: schema_version() == 7 after v4 -> v7 upgrade\n";
 
     // === Test 2: cfg_nodes table exists with all 7 columns ===
     {
@@ -100,7 +100,7 @@ int main() {
         std::cout << "PASS: cfg_nodes table has all 7 correct columns\n";
     }
 
-    // === Test 3: dfg_edges table also exists (full v4->v6 migration chain) ===
+    // === Test 3: dfg_edges table also exists (full v4->v7 migration chain) ===
     {
         auto cols = table_columns(db.raw(), "dfg_edges");
         assert_true(!cols.empty(), "dfg_edges table should exist after full upgrade");
@@ -111,7 +111,19 @@ int main() {
         assert_true(has_column(cols, "lhs"),         "dfg_edges.lhs missing");
         assert_true(has_column(cols, "rhs_snippet"), "dfg_edges.rhs_snippet missing");
         assert_true(has_column(cols, "line"),        "dfg_edges.line missing");
-        std::cout << "PASS: dfg_edges table exists after full v4->v6 migration chain\n";
+        std::cout << "PASS: dfg_edges table exists after full v4->v7 migration chain\n";
+    }
+
+    // === Test 4: embedded_files table also exists (migration v7) ===
+    {
+        auto cols = table_columns(db.raw(), "embedded_files");
+        assert_true(!cols.empty(), "embedded_files table should exist after v7 upgrade");
+        assert_true(has_column(cols, "id"),          "embedded_files.id missing");
+        assert_true(has_column(cols, "symbol_id"),   "embedded_files.symbol_id missing");
+        assert_true(has_column(cols, "file_id"),     "embedded_files.file_id missing");
+        assert_true(has_column(cols, "chunk_index"), "embedded_files.chunk_index missing");
+        assert_true(has_column(cols, "embedded_at"), "embedded_files.embedded_at missing");
+        std::cout << "PASS: embedded_files table exists after v7 upgrade\n";
     }
 
     // Cleanup
