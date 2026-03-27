@@ -10,6 +10,26 @@ find_package(Threads REQUIRED)
 
 include(cmake/FetchDependencies.cmake)
 
+# Semantic search: ONNX Runtime + FAISS + tokenizers-cpp (Phase 14+)
+option(CODETLDR_ENABLE_SEMANTIC_SEARCH
+  "Enable semantic search (requires ONNX Runtime, FAISS, Rust toolchain)"
+  OFF)
+
+if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
+  find_program(RUSTC rustc REQUIRED
+    DOC "Rust compiler (rustc) is required to build tokenizers-cpp. Install via: curl https://sh.rustup.rs -sSf | sh")
+  include(cmake/SemanticSearchDeps.cmake)
+
+  add_library(codetldr_embedding STATIC
+    src/embedding/placeholder.cpp
+  )
+  target_link_libraries(codetldr_embedding
+    PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp)
+  target_include_directories(codetldr_embedding PUBLIC src)
+  target_compile_definitions(codetldr_embedding
+    PUBLIC CODETLDR_ENABLE_SEMANTIC_SEARCH)
+endif()
+
 add_library(codetldr_foundation
   src/common/logging.cpp
   src/config/paths.cpp
