@@ -261,7 +261,8 @@ void register_model_cmd(CLI::App& app, std::string& project_root_str) {
             active_id = codetldr::default_model().id;
         }
 
-        fs::path cache_home = resolve_cache_home();
+        // cache_subdir is relative to XDG_CACHE_HOME/codetldr
+        fs::path cache_home = resolve_cache_home() / "codetldr";
 
         // Print table header
         std::cout << "\n";
@@ -320,8 +321,8 @@ void register_model_cmd(CLI::App& app, std::string& project_root_str) {
             std::exit(1);
         }
 
-        // Check if model is installed
-        fs::path cache_home = resolve_cache_home();
+        // Check if model is installed (cache_subdir is relative to XDG_CACHE_HOME/codetldr)
+        fs::path cache_home = resolve_cache_home() / "codetldr";
         fs::path model_dir = cache_home / spec->cache_subdir;
         bool installed = fs::exists(model_dir / "model_quantized.onnx")
                       && fs::exists(model_dir / "tokenizer.json");
@@ -370,7 +371,8 @@ void register_model_cmd(CLI::App& app, std::string& project_root_str) {
             std::exit(1);
         }
 
-        fs::path cache_home = resolve_cache_home();
+        // cache_subdir is relative to XDG_CACHE_HOME/codetldr
+        fs::path cache_home = resolve_cache_home() / "codetldr";
         fs::path model_dir = cache_home / spec->cache_subdir;
         fs::create_directories(model_dir);
 

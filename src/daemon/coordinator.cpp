@@ -2,6 +2,7 @@
 #include "analysis/pipeline.h"
 #include "common/logging.h"
 #include "config/paths.h"
+#include "embedding/model_registry.h"
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <spdlog/spdlog.h>
 #include <poll.h>
@@ -14,10 +15,8 @@
 #include <stdexcept>
 #include <filesystem>
 #include <algorithm>
-#include <unordered_set>
-#ifdef __linux__
 #include <fstream>
-#endif
+#include <unordered_set>
 
 namespace {
 // Global stop flag — set by signal handlers (SIGTERM/SIGINT)
@@ -48,6 +47,56 @@ static const std::unordered_set<std::string> kScanExtensions = {
     ".cpp", ".h", ".py", ".js", ".ts", ".java", ".kt", ".swift",
     ".m", ".rs", ".c", ".cc", ".cxx", ".hpp", ".tsx", ".jsx"
 };
+
+// Read [embedding].model from a minimal TOML-like config file.
+// Looks for a line like: model = "SomeModelId" inside [embedding] section.
+// Returns "CodeRankEmbed" (default) if file doesn't exist or key is missing.
+static std::string read_active_model_id(const std::filesystem::path& config_path) {
+    if (!std::filesystem::exists(config_path)) return "CodeRankEmbed";
+    std::ifstream in(config_path);
+    if (!in) return "CodeRankEmbed";
+
+    bool in_embedding_section = false;
+    std::string line;
+    while (std::getline(in, line)) {
+        std::size_t start = line.find_first_not_of(" \t");
+        if (start == std::string::npos) continue;
+        std::string trimmed = line.substr(start);
+
+        if (trimmed[0] == '[') {
+            in_embedding_section = (trimmed.find("[embedding]") == 0);
+            continue;
+        }
+        if (!in_embedding_section) continue;
+
+        if (trimmed.find("model") == 0) {
+            std::size_t eq = trimmed.find('=');
+            if (eq == std::string::npos) continue;
+            std::string val = trimmed.substr(eq + 1);
+            std::size_t q1 = val.find('"');
+            std::size_t q2 = val.rfind('"');
+            if (q1 != std::string::npos && q2 != q1) {
+                return val.substr(q1 + 1, q2 - q1 - 1);
+            }
+        }
+    }
+    return "CodeRankEmbed";
+}
+
+// Read stored model_fingerprint from metadata table. Returns "" if absent.
+static std::string read_stored_fingerprint(SQLite::Database& db) {
+    try {
+        SQLite::Statement q(db,
+            "SELECT value FROM metadata WHERE key = 'model_fingerprint' LIMIT 1");
+        if (q.executeStep()) {
+            return q.getColumn(0).getString();
+        }
+    } catch (...) {
+        // metadata table may not exist if migrations haven't run yet — safe to ignore
+    }
+    return "";
+}
+
 } // anonymous namespace
 
 namespace codetldr {
@@ -105,21 +154,50 @@ Coordinator::Coordinator(const std::filesystem::path& project_root,
     {
         namespace fs = std::filesystem;
         XdgPaths xdg = resolve_xdg_paths();
-        fs::path cache_dir = xdg.cache_home / "codetldr" / "models" / "CodeRankEmbed";
+
+        // MDL-02/MDL-05: Read active model from project config, fall back to global, then default
+        fs::path proj_config = project_root_ / ".codetldr" / "config.toml";
+        std::string active_model_id = read_active_model_id(proj_config);
+        if (active_model_id == "CodeRankEmbed") {
+            // Try global config as well (config_home already includes codetldr/)
+            fs::path global_config = xdg.config_home / "config.toml";
+            if (fs::exists(global_config)) {
+                std::string global_id = read_active_model_id(global_config);
+                if (!global_id.empty() && global_id != "CodeRankEmbed") {
+                    active_model_id = global_id;
+                }
+            }
+        }
+
+        // Look up active ModelSpec in registry
+        const codetldr::ModelSpec* spec = codetldr::find_model(active_model_id);
+        if (!spec) {
+            spdlog::warn("Coordinator: unknown model '{}' in config — falling back to CodeRankEmbed",
+                         active_model_id);
+            spec = &codetldr::default_model();
+            active_model_id = spec->id;
+        }
+
+        // Derive paths from spec
+        fs::path cache_dir = xdg.cache_home / spec->cache_subdir;
         fs::path model_path = cache_dir / "model_quantized.onnx";
         fs::path tokenizer_path = cache_dir / "tokenizer.json";
 
         model_manager_ = std::make_unique<ModelManager>(model_path, tokenizer_path);
 
         if (model_manager_->status() == ModelStatus::loaded) {
-            fs::path faiss_path = project_root_ / ".codetldr" / "vectors.faiss";
+            // MDL-05: model-keyed FAISS path — prevents cross-model vector collisions
+            fs::path faiss_path = project_root_ / ".codetldr"
+                / ("vectors_" + active_model_id + ".faiss");
             vector_store_ = std::make_unique<VectorStore>(
-                VectorStore::open(faiss_path, ModelManager::kEmbeddingDim));
+                VectorStore::open(faiss_path, spec->dim));
             embedding_worker_ = std::make_unique<EmbeddingWorker>(
                 db_, project_root_, model_manager_.get(), vector_store_.get(), model_path);
-            spdlog::info("Coordinator: semantic search enabled (model loaded)");
+            spdlog::info("Coordinator: semantic search enabled (model: {}, dim: {})",
+                         active_model_id, spec->dim);
         } else {
-            spdlog::info("Coordinator: semantic search disabled (model status: {})",
+            spdlog::info("Coordinator: semantic search disabled (model: {}, status: {})",
+                         active_model_id,
                          model_manager_->status() == ModelStatus::model_not_installed
                              ? "not installed" : "load failed");
         }
@@ -215,21 +293,38 @@ void Coordinator::run() {
 
 #ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
     if (embedding_worker_) {
-        // Check model fingerprint: if changed or first run, trigger full rebuild
+        // MDL-04: Check extended fingerprint ("model_id:file_size:mtime_ns").
+        // Model ID prefix ensures full rebuild when switching models.
         namespace fs = std::filesystem;
-        XdgPaths xdg = resolve_xdg_paths();
-        fs::path model_path = xdg.cache_home / "codetldr" / "models" / "CodeRankEmbed" / "model_quantized.onnx";
-        std::string current_fp = EmbeddingWorker::compute_model_fingerprint(model_path);
-        if (!current_fp.empty()) {
-            std::string stored_fp;
-            try {
-                SQLite::Statement q(db_, "SELECT value FROM metadata WHERE key = 'model_fingerprint'");
-                if (q.executeStep()) {
-                    stored_fp = q.getColumn(0).getString();
+        XdgPaths xdg2 = resolve_xdg_paths();
+
+        // Re-resolve active model to get the model path for fingerprint computation
+        fs::path proj_config2 = project_root_ / ".codetldr" / "config.toml";
+        std::string active_model_id2 = read_active_model_id(proj_config2);
+        if (active_model_id2 == "CodeRankEmbed") {
+            // config_home already includes codetldr/
+            fs::path global_cfg = xdg2.config_home / "config.toml";
+            if (fs::exists(global_cfg)) {
+                std::string gid = read_active_model_id(global_cfg);
+                if (!gid.empty() && gid != "CodeRankEmbed") {
+                    active_model_id2 = gid;
                 }
-            } catch (...) {
-                // metadata table may not exist if migrations haven't run yet — safe to ignore
             }
+        }
+        const codetldr::ModelSpec* spec2 = codetldr::find_model(active_model_id2);
+        if (!spec2) spec2 = &codetldr::default_model();
+
+        fs::path model_path2 = xdg2.cache_home / spec2->cache_subdir / "model_quantized.onnx";
+
+        // Extended fingerprint: "model_id:file_size:mtime_ns"
+        std::string file_fp = EmbeddingWorker::compute_model_fingerprint(model_path2);
+        std::string current_fp;
+        if (!file_fp.empty()) {
+            current_fp = active_model_id2 + ":" + file_fp;
+        }
+
+        if (!current_fp.empty()) {
+            std::string stored_fp = read_stored_fingerprint(db_);
             if (stored_fp != current_fp) {
                 spdlog::info("Coordinator: model fingerprint changed ({} -> {}), scheduling full re-embedding",
                              stored_fp.empty() ? "none" : stored_fp, current_fp);
