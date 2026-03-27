@@ -21,13 +21,22 @@ if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
   include(cmake/SemanticSearchDeps.cmake)
 
   add_library(codetldr_embedding STATIC
-    src/embedding/placeholder.cpp
+    src/embedding/model_manager.cpp
+    src/embedding/chunk_extractor.cpp
   )
   target_link_libraries(codetldr_embedding
-    PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp)
+    PUBLIC onnxruntime::onnxruntime faiss tokenizers_cpp codetldr_foundation)
   target_include_directories(codetldr_embedding PUBLIC src)
   target_compile_definitions(codetldr_embedding
     PUBLIC CODETLDR_ENABLE_SEMANTIC_SEARCH)
+
+  add_executable(test_embedding_pipeline tests/test_embedding_pipeline.cpp)
+  target_link_libraries(test_embedding_pipeline PRIVATE codetldr_embedding)
+  add_test(NAME embedding_pipeline COMMAND test_embedding_pipeline)
+
+  add_executable(test_chunk_extractor tests/test_chunk_extractor.cpp)
+  target_link_libraries(test_chunk_extractor PRIVATE codetldr_embedding codetldr_foundation)
+  add_test(NAME chunk_extractor COMMAND test_chunk_extractor)
 endif()
 
 add_library(codetldr_foundation
