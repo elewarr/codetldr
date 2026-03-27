@@ -56,7 +56,8 @@ Coordinator::Coordinator(const std::filesystem::path& project_root,
                          SQLite::Database& db,
                          const LanguageRegistry& registry,
                          const std::filesystem::path& sock_path,
-                         std::chrono::seconds idle_timeout)
+                         std::chrono::seconds idle_timeout,
+                         HybridSearchConfig hybrid_config)
     : project_root_(project_root)
     , db_(db)
     , registry_(registry)
@@ -98,9 +99,11 @@ Coordinator::Coordinator(const std::filesystem::path& project_root,
     std::filesystem::path status_path = project_root_ / ".codetldr" / "status.json";
     status_writer_ = std::make_unique<StatusWriter>(status_path);
 
-    // Set up RequestRouter (pass db_ and db_path for HybridSearchEngine)
+    // Set up RequestRouter with hybrid search config
     std::filesystem::path db_path = project_root_ / ".codetldr" / "index.sqlite";
-    router_ = std::make_unique<RequestRouter>(*this, db_, db_path);
+    router_ = std::make_unique<RequestRouter>(*this, db_, db_path,
+                                               /*model=*/nullptr, /*store=*/nullptr,
+                                               hybrid_config);
 }
 
 Coordinator::~Coordinator() {
