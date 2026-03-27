@@ -188,6 +188,16 @@ add_executable(test_cli_init tests/test_cli_init.cpp)
 target_link_libraries(test_cli_init PRIVATE codetldr_daemon codetldr_analysis codetldr_foundation)
 add_test(NAME cli_init COMMAND test_cli_init)
 
+add_executable(test_semantic_search tests/test_semantic_search.cpp)
+if(CODETLDR_ENABLE_SEMANTIC_SEARCH)
+  target_link_libraries(test_semantic_search PRIVATE
+    codetldr_daemon codetldr_query codetldr_foundation codetldr_embedding codetldr_analysis)
+else()
+  target_link_libraries(test_semantic_search PRIVATE
+    codetldr_daemon codetldr_query codetldr_foundation codetldr_analysis)
+endif()
+add_test(NAME semantic_search COMMAND test_semantic_search)
+
 add_executable(test_mcp_provider tests/test_mcp_provider.cpp)
 target_link_libraries(test_mcp_provider PRIVATE nlohmann_json::nlohmann_json)
 add_test(NAME mcp_provider COMMAND test_mcp_provider)

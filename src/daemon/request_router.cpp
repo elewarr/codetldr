@@ -3,6 +3,9 @@
 #include "query/search_engine.h"
 #include "query/context_builder.h"
 #include <unistd.h>
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+#include "embedding/model_manager.h"
+#endif
 
 namespace codetldr {
 
@@ -413,6 +416,56 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
             error["message"] = e.what();
             response["error"] = error;
         }
+
+    } else if (method == "semantic_search") {
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+        auto model_st = coordinator_.model_status();
+        if (model_st != ModelStatus::loaded) {
+            nlohmann::json error;
+            error["code"]    = -32001;
+            error["message"] = "Semantic search not available — model not installed. "
+                               "Run: codetldr model download";
+            response["error"] = error;
+        } else {
+            try {
+                const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
+                std::string query = params.value("query", "");
+                int limit = params.value("limit", 10);
+
+                auto search_results = coordinator_.semantic_search(query, limit);
+
+                nlohmann::json arr = nlohmann::json::array();
+                for (const auto& [symbol_id, dist] : search_results) {
+                    SQLite::Statement q(db_,
+                        "SELECT s.name, s.kind, f.path, s.line_start "
+                        "FROM symbols s JOIN files f ON s.file_id = f.id WHERE s.id = ?");
+                    q.bind(1, static_cast<long long>(symbol_id));
+                    if (!q.executeStep()) continue;  // stale index entry
+
+                    nlohmann::json item;
+                    item["name"]       = q.getColumn(0).getString();
+                    item["kind"]       = q.getColumn(1).getString();
+                    item["file_path"]  = q.getColumn(2).getString();
+                    item["line_start"] = q.getColumn(3).getInt();
+                    item["score"]      = 1.0f - dist / 2.0f;  // L2->cosine on normalized vectors
+                    arr.push_back(std::move(item));
+                }
+                response["result"] = std::move(arr);
+            } catch (const std::exception& e) {
+                nlohmann::json error;
+                error["code"]    = -32000;
+                error["message"] = e.what();
+                response["error"] = error;
+            }
+        }
+#else
+        {
+            nlohmann::json error;
+            error["code"]    = -32001;
+            error["message"] = "Semantic search not compiled in this build";
+            response["error"] = error;
+        }
+#endif
 
     } else {
         nlohmann::json error;

@@ -421,6 +421,20 @@ nlohmann::json Coordinator::get_status_json() {
     return j;
 }
 
+#ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
+std::vector<std::pair<int64_t, float>>
+Coordinator::semantic_search(const std::string& query, int k) const {
+    if (!model_manager_ || model_manager_->status() != ModelStatus::loaded) {
+        return {};
+    }
+    if (!vector_store_ || vector_store_->ntotal() == 0) {
+        return {};
+    }
+    auto query_vec = model_manager_->embed(query, /*is_query=*/true);
+    return vector_store_->search(query_vec, k);
+}
+#endif
+
 void Coordinator::notify_wakeup() {
     if (wakeup_pipe_[1] >= 0) {
         char byte = 1;
