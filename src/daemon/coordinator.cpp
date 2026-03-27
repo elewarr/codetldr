@@ -1,6 +1,7 @@
 #include "daemon/coordinator.h"
 #include "analysis/pipeline.h"
 #include "common/logging.h"
+#include "query/search_engine.h"
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <spdlog/spdlog.h>
 #include <poll.h>
@@ -355,6 +356,16 @@ nlohmann::json Coordinator::get_status_json() {
     // Language support matrix
     j["language_support"] = get_language_support();
     return j;
+}
+
+std::vector<SearchResult> Coordinator::semantic_search(const std::string& /*query*/,
+                                                         int /*limit*/) {
+    // Phase 15 TODO: when ModelManager is implemented, this should:
+    //   if (!model_manager_ || model_manager_->status() != ModelStatus::loaded) return {};
+    //   std::vector<float> qvec = model_manager_->embed(query, /*is_query=*/true);
+    //   return vector_store_->search(qvec, limit);
+    // Until then, return empty results (FAISS not yet wired).
+    return {};
 }
 
 void Coordinator::notify_wakeup() {

@@ -2,6 +2,7 @@
 #include "daemon/ipc_server.h"
 #include "daemon/request_router.h"
 #include "daemon/status.h"
+#include "query/search_engine.h"
 #include "watcher/file_watcher.h"
 #include "watcher/ignore_filter.h"
 #include "watcher/debouncer.h"
@@ -64,6 +65,11 @@ public:
 
     // Return per-language capability matrix (for get_project_overview and get_status RPC).
     nlohmann::json get_language_support() const;
+
+    // Semantic (FAISS) search — raw vector search path, separate from HybridSearchEngine.
+    // Returns empty vector when CODETLDR_ENABLE_SEMANTIC_SEARCH is OFF or model not loaded.
+    // When Phase 15 ModelManager is implemented, call model_manager_->embed(query, true).
+    std::vector<SearchResult> semantic_search(const std::string& query, int limit = 20);
 
     // Wakeup pipe read fd: for external threads (watcher) to add
     // to their own poll() set to wake the coordinator loop.
