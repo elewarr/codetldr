@@ -117,15 +117,15 @@ int main() {
         SQLite::Statement ins_sym(raw,
             "INSERT INTO symbols (file_id, kind, name, signature, line_start, line_end) "
             "VALUES (?, 'function', 'test_func', 'test_func()', 1, 5)");
-        ins_sym.bind(1, (long long)file_id);
+        ins_sym.bind(1, static_cast<int64_t>(file_id));
         ins_sym.exec();
         int64_t sym_id = raw.getLastInsertRowid();
 
         // Insert a call
         SQLite::Statement ins_call(raw,
             "INSERT INTO calls (caller_id, callee_name, file_id, line) VALUES (?, 'other_func', ?, 3)");
-        ins_call.bind(1, (long long)sym_id);
-        ins_call.bind(2, (long long)file_id);
+        ins_call.bind(1, static_cast<int64_t>(sym_id));
+        ins_call.bind(2, static_cast<int64_t>(file_id));
         ins_call.exec();
 
         std::cout << "PASS: symbols and calls tables accept valid INSERTs\n";
