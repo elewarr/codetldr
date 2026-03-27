@@ -94,6 +94,37 @@ inline const std::vector<std::pair<int, std::string_view>> kMigrations = {
         CREATE INDEX IF NOT EXISTS idx_embedded_files_symbol ON embedded_files(symbol_id);
         CREATE INDEX IF NOT EXISTS idx_embedded_files_file   ON embedded_files(file_id);
     )sql"},
+    {8, R"sql(
+        CREATE TABLE IF NOT EXISTS lsp_definitions (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            caller_file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+            call_line      INTEGER NOT NULL,
+            call_col       INTEGER NOT NULL DEFAULT 0,
+            callee_name    TEXT NOT NULL,
+            def_file_id    INTEGER REFERENCES files(id) ON DELETE SET NULL,
+            def_file_path  TEXT,
+            def_line       INTEGER,
+            def_col        INTEGER,
+            source         TEXT NOT NULL DEFAULT 'lsp'
+        );
+        CREATE INDEX IF NOT EXISTS idx_lsp_def_caller ON lsp_definitions(caller_file_id);
+        CREATE INDEX IF NOT EXISTS idx_lsp_def_callee ON lsp_definitions(callee_name);
+    )sql"},
+    {9, R"sql(
+        CREATE TABLE IF NOT EXISTS lsp_references (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            callee_file_id   INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+            callee_name      TEXT NOT NULL,
+            def_line         INTEGER NOT NULL,
+            caller_file_id   INTEGER REFERENCES files(id) ON DELETE SET NULL,
+            caller_file_path TEXT,
+            caller_line      INTEGER,
+            caller_col       INTEGER,
+            source           TEXT NOT NULL DEFAULT 'lsp'
+        );
+        CREATE INDEX IF NOT EXISTS idx_lsp_ref_callee ON lsp_references(callee_file_id, callee_name);
+        CREATE INDEX IF NOT EXISTS idx_lsp_ref_caller ON lsp_references(caller_file_id);
+    )sql"},
 };
 
 } // namespace codetldr
