@@ -2,6 +2,7 @@
 
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <sys/wait.h>
 
 namespace codetldr {
 
@@ -154,12 +155,36 @@ bool LspManager::tick(Clock::time_point now) {
             entry.state == LspServerState::kIndexing ||
             entry.state == LspServerState::kDegraded) {
 
-            if (!entry.transport.is_running()) {
+            // Use WNOHANG to non-blocking check if the process has exited.
+            // transport.is_running() only returns false after wait() is called,
+            // so we need waitpid(WNOHANG) to detect crashes without blocking.
+            bool crashed = false;
+            pid_t pid = entry.transport.pid();
+            if (pid > 0) {
+                int status = 0;
+                pid_t result = ::waitpid(pid, &status, WNOHANG);
+                if (result > 0) {
+                    // Process has exited
+                    crashed = true;
+                } else if (result < 0) {
+                    // ECHILD: process already reaped — also treat as crash
+                    crashed = true;
+                }
+                // result == 0: still running
+            } else {
+                // No pid — treat as not running
+                crashed = !entry.transport.is_running();
+            }
+
+            if (crashed) {
                 // Remove old fd from map
                 int old_fd = entry.transport.stdout_fd();
                 if (old_fd >= 0) {
                     fd_to_language_.erase(old_fd);
                 }
+                // Don't call entry.transport.wait() since we already waited with WNOHANG above
+                // But we need to mark it as waited in the transport — call wait() with knowledge
+                // that it won't block (process is already reaped)
                 entry.transport.wait();
                 handle_crash(entry, language, now);
                 changed = true;

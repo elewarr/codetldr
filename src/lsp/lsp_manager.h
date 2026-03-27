@@ -57,8 +57,8 @@ public:
     static constexpr std::chrono::seconds kBackoffMin{1};
     static constexpr std::chrono::seconds kBackoffMax{60};
 
-    // Allow test access to backoff_for
-    friend class LspManagerTest;
+    // Pure computation — exposed for testability
+    std::chrono::seconds backoff_for(int restart_count) const;
 
 private:
     struct ServerEntry {
@@ -74,7 +74,6 @@ private:
 
     bool try_spawn(ServerEntry& entry, const std::string& language);
     void handle_crash(ServerEntry& entry, const std::string& language, Clock::time_point now);
-    std::chrono::seconds backoff_for(int restart_count) const;
 
     std::unordered_map<std::string, ServerEntry> servers_;
     std::unordered_map<int, std::string> fd_to_language_;
