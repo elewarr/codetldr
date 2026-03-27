@@ -3,6 +3,7 @@
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <filesystem>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace codetldr {
@@ -10,6 +11,16 @@ namespace codetldr {
 struct HybridSearchConfig {
     int rrf_k               = 60;   // RRF k parameter (Cormack et al. 2009)
     int candidate_multiplier = 3;   // candidate_limit = max(limit * multiplier, 60)
+    int bm25_limit           = 100; // max FTS5 candidates before RRF
+    int vec_limit            = 100; // max FAISS candidates before RRF
+    int return_limit         = 20;  // default final result limit
+};
+
+/// Result envelope returned by HybridSearchEngine search methods.
+/// Wraps result list with the search_mode used ("hybrid" or "fts5_only").
+struct HybridSearchResult {
+    std::vector<SearchResult> results;
+    std::string search_mode;  // "hybrid" or "fts5_only"
 };
 
 // Forward declarations
@@ -33,15 +44,18 @@ public:
                        HybridSearchConfig config = {});
 
     /// Hybrid text search. Equivalent to the old search_text but now uses RRF.
-    std::vector<SearchResult> search_text(const std::string& query,
-                                          const std::string& language = "",
-                                          int limit = 20);
+    HybridSearchResult search_text(const std::string& query,
+                                   const std::string& language = "",
+                                   int limit = 20);
 
     /// Hybrid symbol search. Kind filter applied to FTS5 path only.
-    std::vector<SearchResult> search_symbols(const std::string& query,
-                                              const std::string& kind,
-                                              const std::string& language = "",
-                                              int limit = 20);
+    HybridSearchResult search_symbols(const std::string& query,
+                                      const std::string& kind,
+                                      const std::string& language = "",
+                                      int limit = 20);
+
+    /// Update config at runtime (called per-search for live config reload).
+    void set_config(HybridSearchConfig config);
 
 private:
     SQLite::Database db_;    // owned read-only connection
@@ -54,10 +68,10 @@ private:
     bool vector_available() const;
 
     /// Core fusion: launch std::async for both paths, merge via RRF.
-    std::vector<SearchResult> run_hybrid(const std::string& query,
-                                          const std::string& kind,
-                                          const std::string& language,
-                                          int limit);
+    HybridSearchResult run_hybrid(const std::string& query,
+                                  const std::string& kind,
+                                  const std::string& language,
+                                  int limit);
 };
 
 } // namespace codetldr

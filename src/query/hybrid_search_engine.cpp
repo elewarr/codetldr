@@ -43,22 +43,41 @@ bool HybridSearchEngine::vector_available() const {
 #endif
 }
 
-std::vector<SearchResult> HybridSearchEngine::run_hybrid(
+void HybridSearchEngine::set_config(HybridSearchConfig config) {
+    config_ = config;
+}
+
+HybridSearchResult HybridSearchEngine::run_hybrid(
     const std::string& query, const std::string& kind,
     const std::string& language, int limit)
 {
-    int candidate_limit = std::max(limit * config_.candidate_multiplier, 60);
+    // Determine effective limit: use return_limit as default when limit <= 0
+    int effective_limit = limit > 0 ? limit : config_.return_limit;
+
+    // Compute BM25/FAISS candidate counts
+    int bm25_candidates = config_.bm25_limit > 0
+        ? config_.bm25_limit
+        : std::max(effective_limit * config_.candidate_multiplier, 60);
+    int vec_candidates = config_.vec_limit > 0
+        ? config_.vec_limit
+        : std::max(effective_limit * config_.candidate_multiplier, 60);
 
     if (!vector_available()) {
         // HYB-03: degrade to FTS5-only transparently
-        auto results = fts5_.search_symbols(query, kind, language, limit);
+        HybridSearchResult hybrid_result;
+        auto results = fts5_.search_symbols(query, kind, language, effective_limit);
         for (auto& r : results) r.provenance = "fts5";
-        return results;
+        hybrid_result.results = std::move(results);
+        hybrid_result.search_mode = "fts5_only";
+        return hybrid_result;
     }
+
+    (void)bm25_candidates; // suppress unused warning when semantic search disabled
+    (void)vec_candidates;
 
     // HYB-02: parallel retrieval via std::async
     auto fts5_future = std::async(std::launch::async, [&]() {
-        return fts5_.search_symbols(query, kind, language, candidate_limit);
+        return fts5_.search_symbols(query, kind, language, bm25_candidates);
     });
 
 #ifdef CODETLDR_ENABLE_SEMANTIC_SEARCH
@@ -84,9 +103,9 @@ std::vector<SearchResult> HybridSearchEngine::run_hybrid(
                 allowed_ids.data());
             faiss::SearchParameters params;
             params.sel = &sel;
-            return store_->search(qvec, candidate_limit, &params);
+            return store_->search(qvec, vec_candidates, &params);
         }
-        return store_->search(qvec, candidate_limit);
+        return store_->search(qvec, vec_candidates);
     });
     auto faiss_results = faiss_future.get();
 #else
@@ -154,8 +173,8 @@ std::vector<SearchResult> HybridSearchEngine::run_hybrid(
               [](const auto& a, const auto& b) { return a.second > b.second; });
 
     std::vector<SearchResult> results;
-    results.reserve(static_cast<size_t>(std::min(static_cast<int>(ranked.size()), limit)));
-    for (int i = 0; i < limit && i < static_cast<int>(ranked.size()); ++i) {
+    results.reserve(static_cast<size_t>(std::min(static_cast<int>(ranked.size()), effective_limit)));
+    for (int i = 0; i < effective_limit && i < static_cast<int>(ranked.size()); ++i) {
         int64_t id = ranked[i].first;
         auto it = symbol_map.find(id);
         if (it == symbol_map.end()) continue;
@@ -164,10 +183,14 @@ std::vector<SearchResult> HybridSearchEngine::run_hybrid(
         r.provenance = provenance.at(id);
         results.push_back(std::move(r));
     }
-    return results;
+
+    HybridSearchResult hybrid_result;
+    hybrid_result.results = std::move(results);
+    hybrid_result.search_mode = "hybrid";
+    return hybrid_result;
 }
 
-std::vector<SearchResult> HybridSearchEngine::search_text(
+HybridSearchResult HybridSearchEngine::search_text(
     const std::string& query,
     const std::string& language,
     int limit)
@@ -175,7 +198,7 @@ std::vector<SearchResult> HybridSearchEngine::search_text(
     return run_hybrid(query, /*kind=*/"", language, limit);
 }
 
-std::vector<SearchResult> HybridSearchEngine::search_symbols(
+HybridSearchResult HybridSearchEngine::search_symbols(
     const std::string& query,
     const std::string& kind,
     const std::string& language,

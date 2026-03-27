@@ -64,12 +64,11 @@ int main(int argc, char* argv[]) {
             try {
                 auto config = toml::parse_file(config_path.string());
                 if (auto search = config["search"].as_table()) {
-                    if (auto k = (*search)["hybrid_k"].value<int>()) {
-                        hybrid_cfg.rrf_k = *k;
-                    }
-                    if (auto m = (*search)["candidate_multiplier"].value<int>()) {
-                        hybrid_cfg.candidate_multiplier = *m;
-                    }
+                    if (auto k = (*search)["hybrid_k"].value<int>())             hybrid_cfg.rrf_k              = *k;
+                    if (auto m = (*search)["candidate_multiplier"].value<int>()) hybrid_cfg.candidate_multiplier = *m;
+                    if (auto b = (*search)["hybrid_bm25_limit"].value<int>())    hybrid_cfg.bm25_limit         = *b;
+                    if (auto v = (*search)["hybrid_vec_limit"].value<int>())     hybrid_cfg.vec_limit          = *v;
+                    if (auto r = (*search)["hybrid_return_limit"].value<int>())  hybrid_cfg.return_limit       = *r;
                 }
             } catch (const std::exception& ex) {
                 std::cerr << "Warning: failed to parse config.toml: " << ex.what() << "\n";

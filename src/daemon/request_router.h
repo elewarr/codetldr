@@ -34,12 +34,14 @@ public:
     // Full constructor: hybrid search mode with model and vector store.
     // db_path is used for HybridSearchEngine's own read-only SQLite connection.
     // model and store may be null — hybrid engine degrades to FTS5-only when null.
+    // config_path: path to config.toml for per-search live reload (empty = no reload).
     RequestRouter(Coordinator& coordinator,
                   SQLite::Database& db,
                   const std::filesystem::path& db_path,
                   ModelManager* model = nullptr,
                   VectorStore* store  = nullptr,
-                  HybridSearchConfig hybrid_config = {});
+                  HybridSearchConfig hybrid_config = {},
+                  std::filesystem::path config_path = {});
 
     // Destructor defined in .cpp where complete types are available.
     ~RequestRouter();
@@ -52,6 +54,11 @@ private:
     SQLite::Database& db_;
     std::unique_ptr<HybridSearchEngine> hybrid_engine_;
     std::unique_ptr<ContextBuilder> context_builder_;
+    std::filesystem::path config_path_;
+
+    /// Re-reads [search] section from config_path_ and updates hybrid_engine_ config.
+    /// No-op if config_path_ is empty or file does not exist. Non-fatal on parse error.
+    void reload_search_config();
 };
 
 } // namespace codetldr

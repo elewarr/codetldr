@@ -91,9 +91,10 @@ int main() {
     // -----------------------------------------------------------------------
     {
         HybridSearchEngine eng(db_path, nullptr, nullptr);
-        auto results = eng.search_text("analyze", "", 10);
-        assert(!results.empty());
-        for (const auto& r : results) {
+        auto hybrid = eng.search_text("analyze", "", 10);
+        assert(hybrid.search_mode == "fts5_only");
+        assert(!hybrid.results.empty());
+        for (const auto& r : hybrid.results) {
             assert(r.provenance == "fts5");
         }
         std::cout << "PASS: Test 1 - FTS5-only fallback (null model/store), provenance=fts5\n";
@@ -104,9 +105,10 @@ int main() {
     // -----------------------------------------------------------------------
     {
         HybridSearchEngine eng(db_path, nullptr, nullptr);
-        auto results = eng.search_symbols("", "function", "", 10);
-        assert(!results.empty());
-        for (const auto& r : results) {
+        auto hybrid = eng.search_symbols("", "function", "", 10);
+        assert(hybrid.search_mode == "fts5_only");
+        assert(!hybrid.results.empty());
+        for (const auto& r : hybrid.results) {
             assert(r.kind == "function");
             assert(r.provenance == "fts5");
         }
@@ -118,15 +120,16 @@ int main() {
     // -----------------------------------------------------------------------
     {
         HybridSearchEngine eng(db_path, nullptr, nullptr);
-        auto results = eng.search_symbols("", "function", "python", 10);
-        assert(!results.empty());
-        for (const auto& r : results) {
+        auto hybrid = eng.search_symbols("", "function", "python", 10);
+        assert(hybrid.search_mode == "fts5_only");
+        assert(!hybrid.results.empty());
+        for (const auto& r : hybrid.results) {
             assert(r.kind == "function");
             // Python file path should contain "py"
             assert(r.file_path.find("py") != std::string::npos);
         }
         // Should not return C++ symbols
-        for (const auto& r : results) {
+        for (const auto& r : hybrid.results) {
             assert(r.name != "analyze_file");
             assert(r.name != "extract_calls");
         }
@@ -138,10 +141,10 @@ int main() {
     // -----------------------------------------------------------------------
     {
         HybridSearchEngine eng(db_path, nullptr, nullptr);
-        auto results = eng.search_text("analyze", "", 1);
-        assert(results.size() <= 1);
+        auto hybrid = eng.search_text("analyze", "", 1);
+        assert(hybrid.results.size() <= 1);
         std::cout << "PASS: Test 4 - limit=1 returns at most 1 result (got "
-                  << results.size() << ")\n";
+                  << hybrid.results.size() << ")\n";
     }
 
     // -----------------------------------------------------------------------
@@ -149,9 +152,9 @@ int main() {
     // -----------------------------------------------------------------------
     {
         HybridSearchEngine eng(db_path, nullptr, nullptr);
-        auto results = eng.search_symbols("", "class", "", 10);
-        assert(!results.empty());
-        for (const auto& r : results) {
+        auto hybrid = eng.search_symbols("", "class", "", 10);
+        assert(!hybrid.results.empty());
+        for (const auto& r : hybrid.results) {
             assert(r.kind == "class");
         }
         std::cout << "PASS: Test 5 - empty query + kind filter returns symbols of that kind\n";
@@ -162,10 +165,10 @@ int main() {
     // -----------------------------------------------------------------------
     {
         HybridSearchEngine eng(db_path, nullptr, nullptr);
-        auto results = eng.search_text("analyze", "", 20);
+        auto hybrid = eng.search_text("analyze", "", 20);
         // Verify no duplicate symbol_ids
         std::unordered_map<int64_t, int> counts;
-        for (const auto& r : results) {
+        for (const auto& r : hybrid.results) {
             counts[r.symbol_id]++;
         }
         for (const auto& [id, cnt] : counts) {
@@ -179,8 +182,8 @@ int main() {
     // -----------------------------------------------------------------------
     {
         HybridSearchEngine eng(db_path, nullptr, nullptr);
-        auto results = eng.search_text("xyzzy_nonexistent_12345", "", 10);
-        assert(results.empty());
+        auto hybrid = eng.search_text("xyzzy_nonexistent_12345", "", 10);
+        assert(hybrid.results.empty());
         std::cout << "PASS: Test 7 - nonexistent query returns empty vector\n";
     }
 
@@ -193,8 +196,8 @@ int main() {
         cfg.rrf_k = 10;
         cfg.candidate_multiplier = 5;
         HybridSearchEngine eng(db_path, nullptr, nullptr, cfg);
-        auto results = eng.search_text("analyze", "", 10);
-        assert(!results.empty());
+        auto hybrid = eng.search_text("analyze", "", 10);
+        assert(!hybrid.results.empty());
         std::cout << "PASS: Test 8 - HybridSearchConfig{rrf_k=10, mult=5} accepted, FTS5 path works\n";
     }
 
@@ -203,12 +206,12 @@ int main() {
     // -----------------------------------------------------------------------
     {
         HybridSearchEngine eng(db_path, nullptr, nullptr);
-        auto cpp_results = eng.search_text("analyze", "cpp", 10);
-        auto py_results  = eng.search_text("analyze", "python", 10);
+        auto cpp_hybrid = eng.search_text("analyze", "cpp", 10);
+        auto py_hybrid  = eng.search_text("analyze", "python", 10);
 
         // C++ results should contain analyze_file (not analyze_python)
         bool found_analyze_file = false;
-        for (const auto& r : cpp_results) {
+        for (const auto& r : cpp_hybrid.results) {
             assert(r.file_path.find("cpp") != std::string::npos
                 || r.file_path.find(".cpp") != std::string::npos);
             if (r.name == "analyze_file") found_analyze_file = true;
@@ -217,7 +220,7 @@ int main() {
 
         // Python results should contain analyze_python (not analyze_file from cpp)
         bool found_analyze_python = false;
-        for (const auto& r : py_results) {
+        for (const auto& r : py_hybrid.results) {
             if (r.name == "analyze_python") found_analyze_python = true;
             // Must not contain cpp symbols
             assert(r.name != "analyze_file");
