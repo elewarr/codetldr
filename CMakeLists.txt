@@ -211,6 +211,18 @@ target_include_directories(test_model_download PRIVATE src)
 target_link_libraries(test_model_download PRIVATE codetldr_foundation)
 add_test(NAME model_download COMMAND test_model_download)
 
+# test_model_registry — registry lookup, FAISS path naming, dim values (header-only, no ORT dep)
+add_executable(test_model_registry tests/test_model_registry.cpp)
+target_include_directories(test_model_registry PRIVATE src)
+target_link_libraries(test_model_registry PRIVATE codetldr_foundation)
+add_test(NAME model_registry COMMAND test_model_registry)
+
+# test_model_cmd — model list formatting, config write behavior (header-only, no ORT dep)
+add_executable(test_model_cmd tests/test_model_cmd.cpp)
+target_include_directories(test_model_cmd PRIVATE src)
+target_link_libraries(test_model_cmd PRIVATE codetldr_foundation)
+add_test(NAME model_cmd COMMAND test_model_cmd)
+
 add_executable(test_mcp_provider tests/test_mcp_provider.cpp)
 target_link_libraries(test_mcp_provider PRIVATE nlohmann_json::nlohmann_json)
 add_test(NAME mcp_provider COMMAND test_mcp_provider)
