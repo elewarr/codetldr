@@ -130,6 +130,12 @@ int main(int argc, char* argv[]) {
 
         // typescript-language-server for TypeScript/JavaScript
         std::string tsserver_path = find_binary("typescript-language-server");
+        if (tsserver_path.empty()) {
+            auto local = project_root / "node_modules" / ".bin" / "typescript-language-server";
+            if (fs::exists(local)) {
+                tsserver_path = local.string();
+            }
+        }
         if (!tsserver_path.empty()) {
             lsp_manager.register_language("typescript", {tsserver_path, {"--stdio"},
                 {".ts", ".tsx", ".js", ".jsx"}});
