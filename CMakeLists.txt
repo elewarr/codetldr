@@ -97,6 +97,14 @@ target_link_libraries(codetldr PRIVATE codetldr_daemon)
 add_executable(codetldr-mcp src/mcp/main.cpp)
 target_link_libraries(codetldr-mcp PRIVATE codetldr_daemon)
 
+add_library(codetldr_lsp STATIC
+  src/lsp/lsp_process.cpp
+  src/lsp/lsp_framing.cpp
+)
+target_include_directories(codetldr_lsp PUBLIC src)
+target_link_libraries(codetldr_lsp
+  PUBLIC nlohmann_json::nlohmann_json spdlog::spdlog)
+
 enable_testing()
 
 add_executable(test_xdg_paths tests/test_xdg_paths.cpp)
@@ -216,3 +224,11 @@ set_tests_properties(plugin_artifacts PROPERTIES
   LABELS "integration"
   TIMEOUT 30
 )
+
+add_executable(test_lsp_process tests/test_lsp_process.cpp)
+target_link_libraries(test_lsp_process PRIVATE codetldr_lsp)
+add_test(NAME lsp_process_spawn COMMAND test_lsp_process)
+
+add_executable(test_lsp_framing tests/test_lsp_framing.cpp)
+target_link_libraries(test_lsp_framing PRIVATE codetldr_lsp)
+add_test(NAME lsp_framing COMMAND test_lsp_framing)
