@@ -43,10 +43,10 @@ int main() {
     // Open database - runs migrations
     auto db = codetldr::Database::open(db_path);
 
-    // Test: schema version == 6 (migration v6 adds dfg_edges table)
-    assert_true(db.schema_version() == 6,
-        "schema_version should be 6 after migrations, got " + std::to_string(db.schema_version()));
-    std::cout << "PASS: schema_version == 6\n";
+    // Test: schema version == 7 (migration v7 adds embedded_files table for Phase 22 observability)
+    assert_true(db.schema_version() == 7,
+        "schema_version should be 7 after migrations, got " + std::to_string(db.schema_version()));
+    std::cout << "PASS: schema_version == 7\n";
 
     // Test: symbols table columns
     {
@@ -104,6 +104,18 @@ int main() {
         assert_true(has_column(cols, "line"), "dfg_edges.line missing");
         assert_true(cols.size() == 7, "dfg_edges should have 7 columns");
         std::cout << "PASS: dfg_edges table has correct columns\n";
+    }
+
+    // Test: embedded_files table columns (migration v7)
+    {
+        auto cols = table_columns(db.raw(), "embedded_files");
+        assert_true(!cols.empty(), "embedded_files table should exist");
+        assert_true(has_column(cols, "id"), "embedded_files.id missing");
+        assert_true(has_column(cols, "symbol_id"), "embedded_files.symbol_id missing");
+        assert_true(has_column(cols, "file_id"), "embedded_files.file_id missing");
+        assert_true(has_column(cols, "chunk_index"), "embedded_files.chunk_index missing");
+        assert_true(has_column(cols, "embedded_at"), "embedded_files.embedded_at missing");
+        std::cout << "PASS: embedded_files table has correct columns\n";
     }
 
     // Test: INSERT into files, then symbols, then calls

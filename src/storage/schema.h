@@ -83,6 +83,17 @@ inline const std::vector<std::pair<int, std::string_view>> kMigrations = {
         CREATE INDEX IF NOT EXISTS idx_dfg_edges_file   ON dfg_edges(file_id);
         CREATE INDEX IF NOT EXISTS idx_dfg_edges_symbol ON dfg_edges(symbol_id);
     )sql"},
+    {7, R"sql(
+        CREATE TABLE IF NOT EXISTS embedded_files (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol_id   INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,
+            file_id     INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+            chunk_index INTEGER NOT NULL DEFAULT 0,
+            embedded_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_embedded_files_symbol ON embedded_files(symbol_id);
+        CREATE INDEX IF NOT EXISTS idx_embedded_files_file   ON embedded_files(file_id);
+    )sql"},
 };
 
 } // namespace codetldr
