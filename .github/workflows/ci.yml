@@ -17,18 +17,42 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust/Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "third_party/tokenizers-cpp -> target"
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libopenblas-dev
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libomp
 
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ github.job }}-${{ matrix.os }}
+          key: ${{ github.job }}-${{ matrix.os }}-semantic
 
       - name: Configure CMake
         run: |
+          OPENMP_OPTS=""
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            OPENMP_OPTS="-DOpenMP_ROOT=$(brew --prefix libomp)"
+          fi
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCODETLDR_ENABLE_SEMANTIC_SEARCH=ON \
+            $OPENMP_OPTS
 
       - name: Build
         run: cmake --build build --parallel
