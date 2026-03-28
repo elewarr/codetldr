@@ -89,6 +89,10 @@ public:
     // Pure computation — exposed for testability
     std::chrono::seconds backoff_for(int restart_count) const;
 
+    // Returns true when all detected, non-unavailable backends have reached
+    // kReady, kIndexing, or kDegraded. Used by Coordinator as cold-start drain gate.
+    bool all_backends_ready() const;
+
 private:
     struct ServerEntry {
         LspServerConfig config;
