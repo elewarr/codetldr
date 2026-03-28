@@ -174,6 +174,9 @@ bool LspManager::try_spawn(ServerEntry& entry, const std::string& language) {
             if (language == "cpp") {
                 check_clangd_compile_db(e);
             }
+            if (language == "rust") {
+                check_cargo_toml(e);
+            }
         });
 
     return true;
@@ -399,6 +402,18 @@ void LspManager::check_clangd_compile_db(ServerEntry& entry) {
     spdlog::warn("LspManager: clangd degraded -- compile_commands.json not found. "
                  "Expected at: {}/compile_commands.json (or build/ or cmake-build-*/)",
                  project_root_.string());
+}
+
+void LspManager::check_cargo_toml(ServerEntry& entry) {
+    (void)entry;  // No state change — rust-analyzer does not degrade without Cargo.toml
+    if (std::filesystem::exists(project_root_ / "Cargo.toml")) {
+        spdlog::info("LspManager: rust-analyzer workspace root confirmed (Cargo.toml at {})",
+                     project_root_.string());
+    } else {
+        spdlog::warn("LspManager: rust-analyzer: no Cargo.toml found at {} — "
+                     "single-file mode (workspace features limited)", project_root_.string());
+    }
+    // Do NOT set kDegraded: rust-analyzer supports single-file Rust analysis.
 }
 
 void LspManager::ensure_document_open(const std::string& language,
