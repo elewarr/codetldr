@@ -151,6 +151,18 @@ FetchContent_MakeAvailable(ts_rust)
 add_tree_sitter_grammar(rust ${ts_rust_SOURCE_DIR})
 
 # ============================================================
+# Grammar: Go
+# ============================================================
+FetchContent_Declare(ts_go
+    GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-go.git
+    GIT_TAG        v0.23.4
+    GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR  "__no_cmake__"
+)
+FetchContent_MakeAvailable(ts_go)
+add_tree_sitter_grammar(go ${ts_go_SOURCE_DIR})
+
+# ============================================================
 # Grammar: C
 # ============================================================
 FetchContent_Declare(ts_c
