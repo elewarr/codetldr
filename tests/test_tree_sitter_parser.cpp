@@ -61,7 +61,8 @@ static void test_all_extensions_resolve() {
         ".java",
         ".kt", ".kts",
         ".swift",
-        ".m", ".mm"
+        ".m", ".mm",
+        ".rb", ".rake", ".gemspec", ".ru"
     };
 
     for (const auto& ext : extensions) {
@@ -85,8 +86,8 @@ static void test_unknown_extension_returns_null() {
         "for_extension(\".xyz\") should return nullptr");
     assert_true(reg.for_extension("") == nullptr,
         "for_extension(\"\") should return nullptr");
-    assert_true(reg.for_extension(".rb") == nullptr,
-        "for_extension(\".rb\") should return nullptr");
+    assert_true(reg.for_extension(".lua") == nullptr,
+        "for_extension(\".lua\") should return nullptr");
     std::cout << "PASS: test_unknown_extension_returns_null\n";
 }
 
