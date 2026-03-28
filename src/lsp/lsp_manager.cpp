@@ -358,6 +358,12 @@ std::string LspManager::language_id_for(const std::filesystem::path& path) {
     if (ext == ".tsx") return "typescriptreact";
     if (ext == ".js")  return "javascript";
     if (ext == ".jsx") return "javascriptreact";
+    if (ext == ".rs")                     return "rust";
+    if (ext == ".go")                     return "go";
+    if (ext == ".kt" || ext == ".kts")    return "kotlin";
+    if (ext == ".java")                   return "java";
+    if (ext == ".swift")                  return "swift";
+    if (ext == ".m")                      return "objective-c";
     return "plaintext";
 }
 
