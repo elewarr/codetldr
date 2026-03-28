@@ -62,7 +62,8 @@ static void test_all_extensions_resolve() {
         ".kt", ".kts",
         ".swift",
         ".m", ".mm",
-        ".rb", ".rake", ".gemspec", ".ru"
+        ".rb", ".rake", ".gemspec", ".ru",
+        ".lua"
     };
 
     for (const auto& ext : extensions) {
@@ -86,8 +87,8 @@ static void test_unknown_extension_returns_null() {
         "for_extension(\".xyz\") should return nullptr");
     assert_true(reg.for_extension("") == nullptr,
         "for_extension(\"\") should return nullptr");
-    assert_true(reg.for_extension(".lua") == nullptr,
-        "for_extension(\".lua\") should return nullptr");
+    assert_true(reg.for_extension(".zig") == nullptr,
+        "for_extension(\".zig\") should return nullptr");
     std::cout << "PASS: test_unknown_extension_returns_null\n";
 }
 
@@ -115,6 +116,8 @@ static void test_parse_each_language() {
         {".kt",    "sample.kt"},
         {".swift", "sample.swift"},
         {".m",     "sample.m"},
+        {".rb",    "sample.rb"},
+        {".lua",   "sample.lua"},
     };
 
     for (const auto& fx : fixtures_list) {
@@ -162,6 +165,8 @@ static void test_query_compilation_all_languages() {
             {"kotlin",     ".kt"},
             {"swift",      ".swift"},
             {"objc",       ".m"},
+            {"ruby",       ".rb"},
+            {"lua",        ".lua"},
         };
         for (const auto& [lang, ext] : lang_ext) {
             const auto* entry = reg.for_extension(ext);

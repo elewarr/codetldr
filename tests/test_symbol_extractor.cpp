@@ -211,6 +211,7 @@ static bool test_all_languages_extract_symbols(const LanguageRegistry& reg) {
         {".swift", "sample.swift"},
         {".m",     "sample.m"},
         {".rb",    "sample.rb"},
+        {".lua",   "sample.lua"},
     };
 
     for (const auto& fix : fixtures) {
@@ -270,6 +271,7 @@ static bool test_all_languages_extract_calls(const LanguageRegistry& reg) {
         {".swift", "sample.swift"},
         {".m",     "sample.m"},
         {".rb",    "sample.rb"},
+        {".lua",   "sample.lua"},
     };
 
     for (const auto& fix : fixtures) {
@@ -407,6 +409,53 @@ static bool test_ruby_symbol_kinds(const LanguageRegistry& reg) {
 }
 
 // ============================================================
+// test_lua_symbol_kinds
+// ============================================================
+static bool test_lua_symbol_kinds(const LanguageRegistry& reg) {
+    std::string test_name = "test_lua_symbol_kinds";
+    auto entry = reg.for_extension(".lua");
+    if (!entry) {
+        std::cerr << "[FAIL] " << test_name << ": no entry for .lua\n";
+        return false;
+    }
+
+    auto path = fixture_dir() / "sample.lua";
+    auto source = read_file(path);
+    if (source.empty()) {
+        std::cerr << "[FAIL] " << test_name << ": empty source\n";
+        return false;
+    }
+
+    auto tree = parse_source(entry->language, source);
+    if (!tree) {
+        std::cerr << "[FAIL] " << test_name << ": parse failed\n";
+        return false;
+    }
+
+    auto syms = extract_symbols(tree.get(), entry->symbol_query.get(), source);
+
+    bool found_function = false;
+    bool found_method = false;
+    for (const auto& s : syms) {
+        if (s.name == "greet" && s.kind == "function") found_function = true;
+        if ((s.name == "calculate" || s.name == "process") && s.kind == "method") found_method = true;
+    }
+
+    bool ok = true;
+    if (!found_function) {
+        std::cerr << "[FAIL] " << test_name << ": no 'greet' symbol with kind='function' (plain identifier form)\n";
+        ok = false;
+    }
+    if (!found_method) {
+        std::cerr << "[FAIL] " << test_name << ": no 'calculate' or 'process' symbol with kind='method' (dot/colon form)\n";
+        ok = false;
+    }
+
+    if (ok) std::cout << "[PASS] " << test_name << "\n";
+    return ok;
+}
+
+// ============================================================
 // main
 // ============================================================
 int main() {
@@ -423,6 +472,7 @@ int main() {
     all_pass &= test_all_languages_extract_calls(reg);
     all_pass &= test_symbol_kinds_correct(reg);
     all_pass &= test_ruby_symbol_kinds(reg);
+    all_pass &= test_lua_symbol_kinds(reg);
 
     if (all_pass) {
         std::cout << "\nAll tests PASSED\n";
