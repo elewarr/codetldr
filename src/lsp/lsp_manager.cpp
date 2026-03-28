@@ -34,6 +34,16 @@ void LspManager::register_language(const std::string& language, LspServerConfig 
     entry.detected = false;
 }
 
+void LspManager::register_unavailable_language(
+        const std::string& language, const std::string& reason) {
+    // LspTransport is non-copyable/non-movable — use operator[] like register_language().
+    auto& entry = servers_[language];
+    entry.state = LspServerState::kUnavailable;
+    entry.detected = true;
+    entry.unavailable_reason = reason;
+    spdlog::info("LspManager: registered '{}' as unavailable: {}", language, reason);
+}
+
 void LspManager::set_detected_languages(const std::vector<std::string>& languages) {
     // First, clear all detected flags
     for (auto& [lang, entry] : servers_) {
@@ -99,10 +109,11 @@ void LspManager::set_project_root(const std::filesystem::path& root) {
 }
 
 nlohmann::json LspManager::make_initialize_params(const std::string& language,
-                                                    const std::filesystem::path& project_root) {
+                                                    const std::filesystem::path& project_root,
+                                                    const nlohmann::json& extra_init_options) {
     (void)language;  // reserved for language-specific capability tweaks
     std::string root_uri = "file://" + project_root.string();
-    return {
+    nlohmann::json params = {
         {"processId", static_cast<int>(::getpid())},
         {"clientInfo", {{"name", "codetldr"}, {"version", "2.0"}}},
         {"rootUri", root_uri},
@@ -124,6 +135,11 @@ nlohmann::json LspManager::make_initialize_params(const std::string& language,
             }}
         }}
     };
+    // JDT-05: merge language-specific initializationOptions when provided
+    if (!extra_init_options.is_null()) {
+        params["initializationOptions"] = extra_init_options;
+    }
+    return params;
 }
 
 bool LspManager::try_spawn(ServerEntry& entry, const std::string& language) {
@@ -148,7 +164,7 @@ bool LspManager::try_spawn(ServerEntry& entry, const std::string& language) {
                  language, entry.transport.pid(), fd);
 
     // Send LSP initialize request immediately after spawn
-    auto params = make_initialize_params(language, project_root_);
+    auto params = make_initialize_params(language, project_root_, entry.config.extra_init_options);
     entry.transport.send_request("initialize", params,
         [this, language](const nlohmann::json& result, const nlohmann::json& error) {
             (void)result;
@@ -329,10 +345,14 @@ nlohmann::json LspManager::status_json() const {
         if (!entry.detected) {
             continue;
         }
-        result.push_back({
+        nlohmann::json item = {
             {"language", language},
             {"state", to_string(entry.state)}
-        });
+        };
+        if (!entry.unavailable_reason.empty()) {
+            item["message"] = entry.unavailable_reason;
+        }
+        result.push_back(item);
     }
     return result;
 }

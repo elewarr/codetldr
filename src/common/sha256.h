@@ -1,5 +1,5 @@
 #pragma once
-// Cross-platform SHA256 file digest.
+// Cross-platform SHA256 file and string digest.
 // Returns 64-character lowercase hex string, or "" on error.
 
 #include <filesystem>
@@ -19,6 +19,23 @@ inline std::string sha256_file(const std::filesystem::path& path) {
     while (f.read(buf, sizeof(buf)) || f.gcount() > 0) {
         CC_SHA256_Update(&ctx, buf, static_cast<CC_LONG>(f.gcount()));
     }
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256_Final(digest, &ctx);
+    std::string hex;
+    hex.reserve(64);
+    for (auto b : digest) {
+        char h[3];
+        std::snprintf(h, sizeof(h), "%02x", b);
+        hex += h;
+    }
+    return hex;
+}
+
+// Returns 64-char hex SHA256 of the input string.
+inline std::string sha256_string(const std::string& input) {
+    CC_SHA256_CTX ctx;
+    CC_SHA256_Init(&ctx);
+    CC_SHA256_Update(&ctx, input.data(), static_cast<CC_LONG>(input.size()));
     unsigned char digest[CC_SHA256_DIGEST_LENGTH];
     CC_SHA256_Final(digest, &ctx);
     std::string hex;
@@ -60,6 +77,17 @@ inline std::string sha256_file(const std::filesystem::path& path) {
     std::string result(buf);
     auto space = result.find(' ');
     return space != std::string::npos ? result.substr(0, space) : "";
+}
+
+inline std::string sha256_string(const std::string& input) {
+    char tmppath[] = "/tmp/codetldr-sha256-XXXXXX";
+    int fd = ::mkstemp(tmppath);
+    if (fd < 0) return "";
+    ::write(fd, input.data(), input.size());
+    ::close(fd);
+    std::string result = sha256_file(tmppath);
+    ::unlink(tmppath);
+    return result;
 }
 
 #endif
