@@ -133,6 +133,13 @@ bool LspManager::try_spawn(ServerEntry& entry, const std::string& language) {
         return false;
     }
     entry.state = LspServerState::kStarting;
+    // INFRA-03: Apply per-language handshake timeout when configured
+    if (entry.config.handshake_timeout_s > 0) {
+        entry.transport.set_timeout(
+            std::chrono::seconds(entry.config.handshake_timeout_s));
+        spdlog::info("LspManager: set handshake timeout for '{}' to {}s",
+                     language, entry.config.handshake_timeout_s);
+    }
     int fd = entry.transport.stdout_fd();
     if (fd >= 0) {
         fd_to_language_[fd] = language;

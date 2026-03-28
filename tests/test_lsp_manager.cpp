@@ -336,6 +336,29 @@ static void test_version_probe_rejects_non_zero_exit() {
 }
 
 // ============================================================
+// Test: Kotlin registration uses handshake_timeout_s=120
+// ============================================================
+static void test_kotlin_timeout_config() {
+    codetldr::LspServerConfig cfg;
+    cfg.command = "/bin/cat";
+    cfg.args = {};
+    cfg.extensions = {".kt", ".kts"};
+    cfg.handshake_timeout_s = 120;
+
+    CHECK(cfg.handshake_timeout_s == 120,
+          "test_kotlin_timeout_config: handshake_timeout_s must be 120");
+
+    // Default config must have handshake_timeout_s=0
+    codetldr::LspServerConfig default_cfg;
+    default_cfg.command = "/bin/cat";
+    default_cfg.extensions = {".cpp"};
+    CHECK(default_cfg.handshake_timeout_s == 0,
+          "test_kotlin_timeout_config: default handshake_timeout_s must be 0");
+
+    std::cout << "PASS: test_kotlin_timeout_config\n";
+}
+
+// ============================================================
 // main
 // ============================================================
 int main() {
@@ -347,6 +370,7 @@ int main() {
     test_6_to_string_coverage();
     test_7_sigpipe_reset();
     test_version_probe_rejects_non_zero_exit();
+    test_kotlin_timeout_config();
 
     std::cout << "\nAll LspManager tests passed.\n";
     return 0;

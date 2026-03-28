@@ -28,6 +28,7 @@ struct LspServerConfig {
     std::string command;                 // e.g. "/usr/bin/clangd"
     std::vector<std::string> args;       // e.g. {"--background-index"}
     std::vector<std::string> extensions; // e.g. {".cpp", ".h", ".c"}
+    int handshake_timeout_s = 0;         // 0 = use transport default (30s); INFRA-03
 };
 
 class LspManager {
