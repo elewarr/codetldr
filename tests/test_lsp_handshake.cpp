@@ -685,9 +685,14 @@ static void test_language_id_mapping() {
         std::string expected_lang_id;
     };
     std::vector<TestCase> cases = {
-        {".py",  "python"},
-        {".ts",  "typescript"},
-        {".js",  "javascript"},
+        {".py",   "python"},
+        {".ts",   "typescript"},
+        {".js",   "javascript"},
+        {".rs",   "rust"},
+        {".go",   "go"},
+        {".kt",   "kotlin"},
+        {".kts",  "kotlin"},
+        {".java", "java"},
     };
 
     for (const auto& tc : cases) {
