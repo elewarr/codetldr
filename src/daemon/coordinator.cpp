@@ -207,6 +207,30 @@ void Coordinator::run() {
         std::vector<std::string> langs(detected_languages.begin(), detected_languages.end());
         lsp_manager_->set_detected_languages(langs);
     }
+
+    // Phase 33: Populate cold-start LSP resolution queues from files table
+    if (!cold_start_queues_populated_ &&
+        (lsp_resolver_ || lsp_dependency_resolver_ || lsp_call_hierarchy_resolver_)) {
+        try {
+            SQLite::Statement q(db_,
+                "SELECT id, path, language FROM files WHERE language IS NOT NULL");
+            while (q.executeStep()) {
+                int64_t fid = q.getColumn(0).getInt64();
+                std::string fpath = q.getColumn(1).getString();
+                std::string flang = q.getColumn(2).getString();
+                if (!flang.empty()) {
+                    cold_start_queues_[flang].emplace_back(fpath, fid);
+                }
+            }
+            cold_start_queues_populated_ = true;
+            spdlog::info("Coordinator: cold-start queues populated ({} languages, {} total files)",
+                         cold_start_queues_.size(),
+                         [&]{ size_t n = 0; for (auto& [_, dq] : cold_start_queues_) n += dq.size(); return n; }());
+        } catch (const std::exception& ex) {
+            spdlog::warn("Coordinator: failed to populate cold-start queues: {}", ex.what());
+        }
+    }
+
     current_status_.files_total = scan_count;
 
     // Update status to idle
@@ -292,6 +316,36 @@ void Coordinator::run() {
             }
             lsp_manager_->tick();
             lsp_manager_->check_timeouts();
+
+            // Phase 33: Drain cold-start queues — one file per language per tick
+            if (cold_start_queues_populated_ && !cold_start_complete_) {
+                if (lsp_manager_->all_backends_ready()) {
+                    bool any_remaining = false;
+                    for (auto& [lang, queue] : cold_start_queues_) {
+                        if (queue.empty()) continue;
+                        any_remaining = true;
+                        auto [fpath, fid] = queue.front();
+                        queue.pop_front();
+                        if (lsp_resolver_) {
+                            lsp_resolver_->resolve_file(
+                                std::filesystem::path(fpath), fid, lang);
+                        }
+                        if (lsp_dependency_resolver_) {
+                            lsp_dependency_resolver_->resolve_dependencies(
+                                std::filesystem::path(fpath), fid, lang);
+                        }
+                        if (lsp_call_hierarchy_resolver_) {
+                            lsp_call_hierarchy_resolver_->resolve_incoming_callers(
+                                std::filesystem::path(fpath), fid, lang);
+                        }
+                    }
+                    if (!any_remaining) {
+                        cold_start_complete_ = true;
+                        cold_start_queues_.clear();  // Free memory (Pitfall 5)
+                        spdlog::info("Coordinator: cold-start LSP resolution complete");
+                    }
+                }
+            }
         }
 
         // After handling events, flush debouncer and analyze ready files
