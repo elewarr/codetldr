@@ -111,6 +111,11 @@ private:
     // Logs warning if not found but does NOT set kDegraded (rust-analyzer supports single-file mode).
     void check_cargo_toml(ServerEntry& entry);
 
+    // Probe filesystem for go.mod after gopls reaches kReady.
+    // Walks up from project_root_ to find nearest go.mod. Scans subtree for multi-module detection.
+    // Logs warning if not found but does NOT set kDegraded (gopls supports GOPATH/single-file mode).
+    void check_go_mod(ServerEntry& entry);
+
     // Map file extension to LSP languageId string.
     static std::string language_id_for(const std::filesystem::path& path);
 
