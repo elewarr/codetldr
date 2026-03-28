@@ -371,6 +371,33 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // ruby-lsp for Ruby (RUBY-LSP-01, RUBY-LSP-02)
+        std::string ruby_lsp_path = find_binary("ruby-lsp");
+        if (!ruby_lsp_path.empty()) {
+            // Version probe: ruby-lsp --version
+            std::string rlsp_cmd = ruby_lsp_path + " --version 2>&1";
+            FILE* rlsp_pipe = ::popen(rlsp_cmd.c_str(), "r");
+            std::string rlsp_version;
+            if (rlsp_pipe) {
+                char rlsp_buf[256];
+                while (::fgets(rlsp_buf, sizeof(rlsp_buf), rlsp_pipe))
+                    rlsp_version += rlsp_buf;
+                int rlsp_rc = ::pclose(rlsp_pipe);
+                while (!rlsp_version.empty() &&
+                       (rlsp_version.back() == '\n' || rlsp_version.back() == '\r'))
+                    rlsp_version.pop_back();
+                if (rlsp_rc != 0) rlsp_version.clear();
+            }
+            if (!rlsp_version.empty()) {
+                lsp_manager.register_language("ruby",
+                    {ruby_lsp_path, {}, {".rb", ".rake", ".gemspec", ".ru"}});
+                spdlog::info("LSP: registered ruby-lsp {} at {}", rlsp_version, ruby_lsp_path);
+            } else {
+                spdlog::warn("LSP: ruby-lsp found at {} but --version failed "
+                             "-- Ruby LSP disabled", ruby_lsp_path);
+            }
+        }
+
         lsp_manager.set_project_root(project_root);
         coordinator.set_lsp_manager(&lsp_manager);
 
