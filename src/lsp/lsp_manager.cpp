@@ -177,6 +177,9 @@ bool LspManager::try_spawn(ServerEntry& entry, const std::string& language) {
             if (language == "rust") {
                 check_cargo_toml(e);
             }
+            if (language == "go") {
+                check_go_mod(e);
+            }
         });
 
     return true;
@@ -414,6 +417,56 @@ void LspManager::check_cargo_toml(ServerEntry& entry) {
                      "single-file mode (workspace features limited)", project_root_.string());
     }
     // Do NOT set kDegraded: rust-analyzer supports single-file Rust analysis.
+}
+
+void LspManager::check_go_mod(ServerEntry& entry) {
+    (void)entry;  // No state change — gopls does not degrade without go.mod
+
+    // GO-03: Walk up from project_root_ to find nearest go.mod
+    std::filesystem::path search = project_root_;
+    bool found_go_mod = false;
+    while (search.has_parent_path() && search != search.parent_path()) {
+        if (std::filesystem::exists(search / "go.mod")) {
+            spdlog::info("LspManager: gopls workspace root: go.mod found at {}",
+                         search.string());
+            found_go_mod = true;
+            break;
+        }
+        search = search.parent_path();
+    }
+    if (!found_go_mod) {
+        spdlog::warn("LspManager: gopls: no go.mod found in {} or any parent — "
+                     "single-file/GOPATH mode (module features limited)",
+                     project_root_.string());
+    }
+
+    // GO-04: Count go.mod files under project_root_ for multi-module warning
+    // Skip vendor/ to avoid false positives from vendored dependencies
+    int go_mod_count = 0;
+    bool has_go_work = std::filesystem::exists(project_root_ / "go.work");
+    std::error_code ec;
+    for (const auto& dir_entry : std::filesystem::recursive_directory_iterator(
+             project_root_,
+             std::filesystem::directory_options::skip_permission_denied, ec)) {
+        // Skip vendor directory to avoid false positives
+        const auto& p = dir_entry.path();
+        bool in_vendor = false;
+        for (const auto& component : p) {
+            if (component == "vendor") { in_vendor = true; break; }
+        }
+        if (in_vendor) continue;
+        if (dir_entry.is_regular_file() && p.filename() == "go.mod") {
+            ++go_mod_count;
+            if (go_mod_count > 10) break;  // Early exit: only need to know if count > 1
+        }
+    }
+    if (go_mod_count > 1 && !has_go_work) {
+        spdlog::warn("LspManager: gopls: {} go.mod files detected without go.work — "
+                     "multi-module workspace not fully supported by single gopls instance "
+                     "(ADV-02). Cross-module references may be incomplete.",
+                     go_mod_count);
+    }
+    // Do NOT set kDegraded: gopls handles single-file and GOPATH mode without go.mod.
 }
 
 void LspManager::ensure_document_open(const std::string& language,
