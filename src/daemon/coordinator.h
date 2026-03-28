@@ -86,7 +86,11 @@ public:
     void notify_wakeup();
 
     // Inject LSP lifecycle manager (non-owning). Call before run(). (Phase 24)
-    void set_lsp_manager(LspManager* mgr) { lsp_manager_ = mgr; }
+    // Also wires the LspManager into RequestRouter for workspace/symbol search (Phase 27).
+    void set_lsp_manager(LspManager* mgr) {
+        lsp_manager_ = mgr;
+        if (router_) router_->set_lsp_manager(mgr);
+    }
 
     // Inject LSP call graph resolver (owning). Call before run(). (Phase 26)
     void set_lsp_resolver(std::unique_ptr<LspCallGraphResolver> resolver);

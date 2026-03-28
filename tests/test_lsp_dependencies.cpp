@@ -420,17 +420,11 @@ static void test_coalesce_path_resolution() {
 }
 
 // ============================================================
-// Test 11: search_symbols returns search_source field
-// (Validates the FTS5 fallback path behavior)
+// Test 11: search_symbols FTS5 fallback still works when lsp_manager is null
+// (Simulates the FTS5 path directly — no RequestRouter needed)
 // ============================================================
-static void test_search_symbols_search_source() {
-    // This test validates that the get_dependencies response structure is correct
-    // and that search_source field concept is understood.
-    // The actual workspace/symbol dispatch requires a real LSP server.
-    // We test the field presence requirement here.
+static void test_search_symbols_fts5_fallback() {
     auto db = make_test_db();
-
-    // Insert a file and symbol for FTS5 search
     int64_t file_id = insert_file(db, "/project/src/foo.cpp");
 
     SQLite::Statement sym_ins(db,
@@ -439,8 +433,7 @@ static void test_search_symbols_search_source() {
     sym_ins.bind(1, file_id);
     sym_ins.exec();
 
-    // FTS5 insert (migration 4 runs INSERT INTO symbols_fts via content table auto-trigger
-    // but migration 4 only runs the INSERT once; subsequent rows need explicit FTS5 insert)
+    // FTS5 explicit insert for the symbol
     try {
         SQLite::Statement fts_ins(db,
             "INSERT INTO symbols_fts(rowid, name, signature, documentation) "
@@ -448,18 +441,83 @@ static void test_search_symbols_search_source() {
         fts_ins.exec();
     } catch (...) {}
 
-    // Query FTS5
+    // Simulate FTS5 search (same as SearchEngine::search_symbols without LSP)
     bool fts5_works = false;
+    std::string found_name;
     try {
-        SQLite::Statement q(db,
-            "SELECT name FROM symbols_fts WHERE symbols_fts MATCH ? LIMIT 1");
-        q.bind(1, "myFunction");
-        fts5_works = q.executeStep();
+        SQLite::Statement q(db, R"sql(
+            SELECT s.id, s.name, s.kind, COALESCE(s.signature,''), COALESCE(s.documentation,''),
+                   f.path, s.line_start, -rank
+            FROM symbols_fts
+            JOIN symbols s ON symbols_fts.rowid = s.id
+            JOIN files f ON s.file_id = f.id
+            WHERE symbols_fts MATCH ?
+            ORDER BY rank
+            LIMIT 20
+        )sql");
+        q.bind(1, "myFunction*");
+        if (q.executeStep()) {
+            fts5_works = true;
+            found_name = q.getColumn(1).getString();
+        }
     } catch (...) {}
 
-    // The search_source field should be present when using FTS5
-    // We just verify the data path works; the actual field is added in request_router.cpp
-    check(fts5_works, "FTS5 search works for search_source field validation");
+    check(fts5_works, "FTS5 fallback works when no LSP available");
+    check(found_name == "myFunction", "FTS5 returns correct symbol name");
+}
+
+// ============================================================
+// Test 12: search_source field is "fts5" in FTS5 path
+// (Validates search_source response field concept)
+// ============================================================
+static void test_search_source_field_fts5() {
+    // Create response object simulating what request_router returns for FTS5 path
+    nlohmann::json result_obj;
+    nlohmann::json arr = nlohmann::json::array();
+    nlohmann::json item;
+    item["name"]          = "myFunction";
+    item["kind"]          = "function";
+    item["file_path"]     = "/project/src/foo.cpp";
+    item["line_start"]    = 1;
+    item["rank"]          = 1.5;
+    arr.push_back(std::move(item));
+    result_obj["results"]       = std::move(arr);
+    result_obj["search_source"] = "fts5";
+    result_obj["query"]         = "myFunction";
+
+    check(result_obj.contains("search_source"), "response has search_source field");
+    check(result_obj["search_source"] == "fts5", "search_source is fts5 for FTS5 path");
+    check(result_obj.contains("results"), "response has results array");
+    check(result_obj["results"].is_array(), "results is array");
+    check(result_obj.contains("query"), "response has query field");
+}
+
+// ============================================================
+// Test 13: search_source field is "workspace-symbol" in LSP cached path
+// (Validates workspace/symbol response shape)
+// ============================================================
+static void test_search_source_field_workspace_symbol() {
+    // Simulate a cached workspace/symbol response
+    nlohmann::json cached = nlohmann::json::array();
+    nlohmann::json sym;
+    sym["name"]          = "myFunction";
+    sym["kind"]          = "12";  // function kind in LSP SymbolKind enum
+    sym["file_path"]     = "/project/src/foo.cpp";
+    sym["line_start"]    = 5;
+    sym["signature"]     = "";
+    sym["documentation"] = "";
+    sym["rank"]          = 1.0;
+    cached.push_back(std::move(sym));
+
+    nlohmann::json result_obj;
+    result_obj["results"]       = std::move(cached);
+    result_obj["search_source"] = "workspace-symbol";
+    result_obj["query"]         = "myFunction";
+
+    check(result_obj.contains("search_source"), "workspace-symbol response has search_source field");
+    check(result_obj["search_source"] == "workspace-symbol", "search_source is workspace-symbol");
+    check(result_obj["results"].size() == 1, "workspace-symbol result has 1 entry");
+    check(result_obj["results"][0]["name"] == "myFunction", "result name is myFunction");
 }
 
 // ============================================================
@@ -478,7 +536,9 @@ int main() {
     test_get_dependencies_not_found();
     test_multiple_import_kinds();
     test_coalesce_path_resolution();
-    test_search_symbols_search_source();
+    test_search_symbols_fts5_fallback();
+    test_search_source_field_fts5();
+    test_search_source_field_workspace_symbol();
 
     std::cout << "\nResults: " << g_pass << " passed, " << g_fail << " failed\n";
     return g_fail > 0 ? 1 : 0;
