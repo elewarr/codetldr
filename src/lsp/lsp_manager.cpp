@@ -187,6 +187,9 @@ bool LspManager::try_spawn(ServerEntry& entry, const std::string& language) {
             if (language == "go") {
                 check_go_mod(e);
             }
+            if (language == "kotlin") {
+                check_kotlin_build(e);
+            }
         });
 
     return true;
@@ -474,6 +477,28 @@ void LspManager::check_go_mod(ServerEntry& entry) {
                      go_mod_count);
     }
     // Do NOT set kDegraded: gopls handles single-file and GOPATH mode without go.mod.
+}
+
+void LspManager::check_kotlin_build(ServerEntry& entry) {
+    (void)entry;  // No state change — kotlin-language-server does not require build files
+
+    // KT-05: Check for Gradle or Maven build files
+    static const std::vector<std::string> kBuildFiles = {
+        "build.gradle.kts", "build.gradle", "pom.xml"
+    };
+
+    for (const auto& name : kBuildFiles) {
+        if (std::filesystem::exists(project_root_ / name)) {
+            spdlog::info("LspManager: kotlin-language-server workspace root confirmed ({} at {})",
+                         name, project_root_.string());
+            return;
+        }
+    }
+
+    spdlog::warn("LspManager: kotlin-language-server: no build.gradle, build.gradle.kts, "
+                 "or pom.xml found at {} — workspace features may be limited",
+                 project_root_.string());
+    // Do NOT set kDegraded: kotlin-language-server can operate without build files.
 }
 
 void LspManager::ensure_document_open(const std::string& language,

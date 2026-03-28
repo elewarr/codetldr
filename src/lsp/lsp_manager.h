@@ -117,6 +117,11 @@ private:
     // Logs warning if not found but does NOT set kDegraded (gopls supports GOPATH/single-file mode).
     void check_go_mod(ServerEntry& entry);
 
+    // Probe filesystem for Kotlin build files after kotlin-language-server reaches kReady.
+    // Checks for build.gradle, build.gradle.kts, or pom.xml at project root.
+    // Logs warning if not found but does NOT set kDegraded.
+    void check_kotlin_build(ServerEntry& entry);
+
     // Map file extension to LSP languageId string.
     static std::string language_id_for(const std::filesystem::path& path);
 
