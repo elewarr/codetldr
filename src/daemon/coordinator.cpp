@@ -53,7 +53,8 @@ static void warn_inotify_limit() {
 static const std::unordered_set<std::string> kScanExtensions = {
     ".cpp", ".h", ".py", ".js", ".ts", ".java", ".kt", ".swift",
     ".m", ".rs", ".c", ".cc", ".cxx", ".hpp", ".tsx", ".jsx", ".go",
-    ".rb", ".rake", ".gemspec", ".ru"
+    ".rb", ".rake", ".gemspec", ".ru",
+    ".lua"
 };
 } // anonymous namespace
 

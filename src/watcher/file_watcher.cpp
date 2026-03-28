@@ -9,7 +9,8 @@ namespace codetldr {
 static const std::unordered_set<std::string> kSourceExtensions = {
     ".cpp", ".h", ".py", ".js", ".ts", ".java", ".kt", ".swift",
     ".m", ".rs", ".c", ".cc", ".cxx", ".hpp", ".tsx", ".jsx",
-    ".rb", ".rake", ".gemspec", ".ru"
+    ".rb", ".rake", ".gemspec", ".ru",
+    ".lua"
 };
 
 // ---- WatcherListener ----

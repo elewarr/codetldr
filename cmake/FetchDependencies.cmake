@@ -248,6 +248,20 @@ FetchContent_MakeAvailable(ts_ruby)
 add_tree_sitter_grammar(ruby ${ts_ruby_SOURCE_DIR})
 
 # ============================================================
+# Grammar: Lua
+# tree-sitter-grammars org (NOT tree-sitter/tree-sitter-lua)
+# Uses C external scanner (scanner.c) -- detected by macro
+# ============================================================
+FetchContent_Declare(ts_lua
+    GIT_REPOSITORY https://github.com/tree-sitter-grammars/tree-sitter-lua.git
+    GIT_TAG        v0.5.0
+    GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR  "__no_cmake__"
+)
+FetchContent_MakeAvailable(ts_lua)
+add_tree_sitter_grammar(lua ${ts_lua_SOURCE_DIR})
+
+# ============================================================
 # efsw — cross-platform file system watcher
 # macOS FSEvents + Linux inotify in one API
 # ============================================================
