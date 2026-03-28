@@ -107,6 +107,10 @@ private:
     // Sets entry state to kDegraded with warning if not found.
     void check_clangd_compile_db(ServerEntry& entry);
 
+    // Probe filesystem for Cargo.toml after rust-analyzer reaches kReady.
+    // Logs warning if not found but does NOT set kDegraded (rust-analyzer supports single-file mode).
+    void check_cargo_toml(ServerEntry& entry);
+
     // Map file extension to LSP languageId string.
     static std::string language_id_for(const std::filesystem::path& path);
 
