@@ -23,6 +23,8 @@
 //  14. test_cargo_toml_found_in_root: rust-analyzer stays ready when Cargo.toml present
 //  15. test_go_mod_not_found: gopls stays ready when go.mod absent
 //  16. test_go_mod_found_in_root: gopls stays ready when go.mod present
+//  17. test_kotlin_build_not_found: kotlin-language-server stays ready when no build file present
+//  18. test_kotlin_build_found: kotlin-language-server stays ready when build.gradle.kts present
 
 #include "lsp/lsp_manager.h"
 #include "lsp/lsp_transport.h"
@@ -907,6 +909,82 @@ static void test_go_mod_found_in_root() {
 }
 
 // ============================================================
+// Test 17: test_kotlin_build_not_found
+// kotlin-language-server stays ready when no build file present
+// ============================================================
+static void test_kotlin_build_not_found() {
+    LspManager mgr;
+    std::string tmpdir = make_temp_dir();
+    CHECK(!tmpdir.empty(), "test_kotlin_build_not_found: tmpdir creation failed");
+    mgr.set_project_root(tmpdir);
+
+    LspServerConfig cfg;
+    cfg.command = "/bin/cat";
+    cfg.args    = {};
+    cfg.extensions = {".kt", ".kts"};
+
+    mgr.register_language("kotlin", cfg);
+    mgr.set_detected_languages({"kotlin"});
+    mgr.ensure_server("kotlin");
+    complete_handshake(mgr, "kotlin");
+
+    // No build files in tmpdir -> must stay ready (NOT degraded)
+    auto status = mgr.status_json();
+    bool found_ready = false;
+    for (const auto& s : status) {
+        if (s["language"] == "kotlin" && s["state"] == "ready") {
+            found_ready = true;
+        }
+    }
+    CHECK(found_ready,
+          "test_kotlin_build_not_found: kotlin server must stay ready when no build file present");
+    ::rmdir(tmpdir.c_str());
+    mgr.shutdown();
+    std::cout << "PASS: test_kotlin_build_not_found\n";
+}
+
+// ============================================================
+// Test 18: test_kotlin_build_found
+// kotlin-language-server stays ready when build.gradle.kts present
+// ============================================================
+static void test_kotlin_build_found() {
+    LspManager mgr;
+    std::string tmpdir = make_temp_dir();
+    CHECK(!tmpdir.empty(), "test_kotlin_build_found: tmpdir creation failed");
+    mgr.set_project_root(tmpdir);
+
+    // Create build.gradle.kts at project root
+    std::ofstream gradle(tmpdir + "/build.gradle.kts");
+    gradle << "plugins { kotlin(\"jvm\") version \"1.9.0\" }\n";
+    gradle.close();
+
+    LspServerConfig cfg;
+    cfg.command = "/bin/cat";
+    cfg.args    = {};
+    cfg.extensions = {".kt", ".kts"};
+
+    mgr.register_language("kotlin", cfg);
+    mgr.set_detected_languages({"kotlin"});
+    mgr.ensure_server("kotlin");
+    complete_handshake(mgr, "kotlin");
+
+    auto status = mgr.status_json();
+    bool found_ready = false;
+    for (const auto& s : status) {
+        if (s["language"] == "kotlin" && s["state"] == "ready") {
+            found_ready = true;
+        }
+    }
+    CHECK(found_ready,
+          "test_kotlin_build_found: kotlin server must stay ready when build.gradle.kts present");
+
+    ::unlink((tmpdir + "/build.gradle.kts").c_str());
+    ::rmdir(tmpdir.c_str());
+    mgr.shutdown();
+    std::cout << "PASS: test_kotlin_build_found\n";
+}
+
+// ============================================================
 // main
 // ============================================================
 int main() {
@@ -926,6 +1004,8 @@ int main() {
     test_cargo_toml_found_in_root();
     test_go_mod_not_found();
     test_go_mod_found_in_root();
+    test_kotlin_build_not_found();
+    test_kotlin_build_found();
 
     std::cout << "\nAll LspHandshake tests passed.\n";
     return 0;
