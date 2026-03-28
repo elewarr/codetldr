@@ -416,6 +416,7 @@ std::string LspManager::language_id_for(const std::filesystem::path& path) {
     if (ext == ".java")                   return "java";
     if (ext == ".swift")                  return "swift";
     if (ext == ".m")                      return "objective-c";
+    if (ext == ".rb" || ext == ".rake" || ext == ".gemspec" || ext == ".ru") return "ruby";
     return "plaintext";
 }
 

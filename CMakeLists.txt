@@ -62,7 +62,8 @@ target_link_libraries(codetldr_analysis
   PUBLIC codetldr_foundation tree_sitter_lib
   PRIVATE ts_grammar_python ts_grammar_javascript ts_grammar_typescript
           ts_grammar_tsx ts_grammar_rust ts_grammar_go ts_grammar_c ts_grammar_cpp
-          ts_grammar_java ts_grammar_kotlin ts_grammar_swift ts_grammar_objc)
+          ts_grammar_java ts_grammar_kotlin ts_grammar_swift ts_grammar_objc
+          ts_grammar_ruby)
 
 add_library(codetldr_daemon
   src/daemon/status.cpp
