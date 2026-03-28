@@ -2,8 +2,11 @@
 #include "daemon/coordinator.h"
 #include "query/search_engine.h"
 #include "query/context_builder.h"
+#include "lsp/lsp_manager.h"
+#include "lsp/lsp_transport.h"
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <unistd.h>
+#include <chrono>
 
 namespace codetldr {
 
@@ -84,22 +87,118 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
             std::string kind  = params.value("kind", "");
             int limit = params.value("limit", 20);
 
-            auto results = search_engine_->search_symbols(query, kind, limit);
+            // SYM-01: workspace/symbol as primary when LSP available, FTS5 as fallback.
+            // Strategy: dispatch workspace/symbol async, cache results. Return cached LSP
+            // results on subsequent calls for the same query. First call always uses FTS5.
+            // Both dispatch() and LSP response callbacks run on the same poll() thread —
+            // no mutex needed on lsp_symbol_cache_.
 
-            nlohmann::json arr = nlohmann::json::array();
-            for (const auto& r : results) {
-                nlohmann::json item;
-                item["symbol_id"]     = r.symbol_id;
-                item["name"]          = r.name;
-                item["kind"]          = r.kind;
-                item["signature"]     = r.signature;
-                item["documentation"] = r.documentation;
-                item["file_path"]     = r.file_path;
-                item["line_start"]    = r.line_start;
-                item["rank"]          = r.rank;
-                arr.push_back(std::move(item));
+            bool served_from_lsp = false;
+
+            // Check if we have cached workspace/symbol results for this query
+            if (lsp_manager_ != nullptr) {
+                auto it = lsp_symbol_cache_.find(query);
+                if (it != lsp_symbol_cache_.end()) {
+                    auto age = std::chrono::steady_clock::now() - it->second.first;
+                    auto age_secs = std::chrono::duration_cast<std::chrono::seconds>(age).count();
+                    if (age_secs < kLspCacheTtlSeconds) {
+                        // Return cached workspace/symbol results
+                        const nlohmann::json& cached = it->second.second;
+                        nlohmann::json result_obj;
+                        result_obj["results"]       = cached;
+                        result_obj["search_source"] = "workspace-symbol";
+                        result_obj["query"]         = query;
+                        response["result"] = std::move(result_obj);
+                        served_from_lsp = true;
+                    } else {
+                        // Stale — remove from cache
+                        lsp_symbol_cache_.erase(it);
+                    }
+                }
+
+                if (!served_from_lsp) {
+                    // Dispatch workspace/symbol async for all languages — results cached for next call
+                    std::vector<std::string> ws_languages = {"cpp", "python", "typescript"};
+                    for (const auto& lang : ws_languages) {
+                        std::string cached_query = query;
+                        lsp_manager_->send_when_ready(lang,
+                            [this, lang, cached_query, limit]() mutable {
+                                LspTransport* transport = lsp_manager_->get_transport(lang);
+                                if (!transport) return;
+
+                                nlohmann::json params_ws;
+                                params_ws["query"] = cached_query;
+
+                                transport->send_request("workspace/symbol", params_ws,
+                                    [this, cached_query](
+                                            const nlohmann::json& result,
+                                            const nlohmann::json& /*error*/) {
+                                        if (!result.is_array()) return;
+
+                                        // Merge into cache (append if partial results from multiple langs)
+                                        auto& entry = lsp_symbol_cache_[cached_query];
+                                        if (!entry.second.is_array()) {
+                                            entry.second = nlohmann::json::array();
+                                        }
+                                        for (const auto& sym : result) {
+                                            if (!sym.is_object()) continue;
+                                            nlohmann::json item;
+                                            item["name"]      = sym.value("name", "");
+                                            item["kind"]      = sym.contains("kind") ? sym["kind"].dump() : "";
+                                            item["file_path"] = "";
+                                            item["line_start"] = 0;
+                                            // Extract location from SymbolInformation
+                                            if (sym.contains("location") && sym["location"].is_object()) {
+                                                const auto& loc = sym["location"];
+                                                if (loc.contains("uri")) {
+                                                    item["file_path"] = loc["uri"].get<std::string>();
+                                                    // Strip file:// prefix
+                                                    std::string& fp = item["file_path"].get_ref<std::string&>();
+                                                    if (fp.size() >= 7 && fp.substr(0, 7) == "file://") {
+                                                        fp = fp.substr(7);
+                                                    }
+                                                }
+                                                if (loc.contains("range") && loc["range"].contains("start")) {
+                                                    item["line_start"] = loc["range"]["start"].value("line", 0) + 1;
+                                                }
+                                            }
+                                            item["signature"]     = sym.value("containerName", "");
+                                            item["documentation"] = "";
+                                            item["rank"]          = 1.0;
+                                            entry.second.push_back(std::move(item));
+                                        }
+                                        // Record timestamp on first batch
+                                        entry.first = std::chrono::steady_clock::now();
+                                    });
+                            });
+                    }
+                }
             }
-            response["result"] = std::move(arr);
+
+            if (!served_from_lsp) {
+                // FTS5 fallback (also used when cache cold)
+                auto results = search_engine_->search_symbols(query, kind, limit);
+
+                nlohmann::json arr = nlohmann::json::array();
+                for (const auto& r : results) {
+                    nlohmann::json item;
+                    item["symbol_id"]     = r.symbol_id;
+                    item["name"]          = r.name;
+                    item["kind"]          = r.kind;
+                    item["signature"]     = r.signature;
+                    item["documentation"] = r.documentation;
+                    item["file_path"]     = r.file_path;
+                    item["line_start"]    = r.line_start;
+                    item["rank"]          = r.rank;
+                    arr.push_back(std::move(item));
+                }
+
+                nlohmann::json result_obj;
+                result_obj["results"]       = std::move(arr);
+                result_obj["search_source"] = "fts5";
+                result_obj["query"]         = query;
+                response["result"] = std::move(result_obj);
+            }
         } catch (const std::exception& e) {
             nlohmann::json error;
             error["code"]    = -32000;
