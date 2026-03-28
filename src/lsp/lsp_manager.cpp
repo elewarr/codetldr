@@ -253,6 +253,18 @@ std::chrono::seconds LspManager::backoff_for(int restart_count) const {
     return std::chrono::seconds(std::min(delay, static_cast<long>(kBackoffMax.count())));
 }
 
+bool LspManager::all_backends_ready() const {
+    for (const auto& [lang, entry] : servers_) {
+        if (!entry.detected) continue;
+        if (entry.state == LspServerState::kUnavailable) continue;
+        if (entry.state == LspServerState::kNotStarted ||
+            entry.state == LspServerState::kStarting) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool LspManager::tick(Clock::time_point now) {
     bool changed = false;
 
