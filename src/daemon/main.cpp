@@ -1,6 +1,8 @@
 #include "daemon/coordinator.h"
 #include "daemon/daemonize.h"
 #include "common/logging.h"
+#include "common/sha256.h"
+#include "config/paths.h"
 #include "config/project_dir.h"
 #include "storage/database.h"
 #include "analysis/tree_sitter/language_registry.h"
@@ -22,6 +24,73 @@
 #include <string>
 
 namespace fs = std::filesystem;
+
+// JDT-03: Detect Java 21+ runtime. Returns java_home path if found, empty string if not.
+// Checks JAVA_HOME/bin/java first, then java on PATH.
+// IMPORTANT: java -version writes to stderr, not stdout — must use 2>&1 redirect.
+static std::string detect_java_21_plus() {
+    std::vector<std::string> candidates;
+    const char* java_home = ::getenv("JAVA_HOME");
+    if (java_home && java_home[0] != '\0') {
+        candidates.push_back(std::string(java_home) + "/bin/java");
+    }
+    candidates.push_back("java");  // PATH fallback
+
+    for (const auto& java_bin : candidates) {
+        // java -version writes to stderr — redirect to stdout
+        std::string cmd = java_bin + " -version 2>&1";
+        FILE* pipe = ::popen(cmd.c_str(), "r");
+        if (!pipe) continue;
+        char buf[512];
+        std::string output;
+        while (::fgets(buf, sizeof(buf), pipe)) output += buf;
+        int rc = ::pclose(pipe);
+        if (rc != 0) continue;
+
+        // Parse version: find quoted string like "21.0.3" or "1.8.0_391"
+        auto q1 = output.find('"');
+        auto q2 = (q1 != std::string::npos) ? output.find('"', q1 + 1) : std::string::npos;
+        if (q1 == std::string::npos || q2 == std::string::npos) continue;
+        std::string ver = output.substr(q1 + 1, q2 - q1 - 1);
+
+        // Handle legacy "1.X" format (Java 8 and below)
+        int major = 0;
+        try {
+            if (ver.size() > 2 && ver[0] == '1' && ver[1] == '.') {
+                major = std::stoi(ver.substr(2));  // "1.8.0" -> 8
+            } else {
+                major = std::stoi(ver);  // "21.0.3" -> 21
+            }
+        } catch (...) {
+            continue;  // Unparseable version string
+        }
+
+        if (major >= 21) {
+            // Return java_home: prefer JAVA_HOME if that's the binary we used
+            if (java_home && java_home[0] != '\0' &&
+                java_bin.find(java_home) == 0) {
+                return std::string(java_home);
+            }
+            // For PATH java, derive home from which java minus /bin/java
+            std::string which_cmd = "which " + java_bin + " 2>/dev/null";
+            FILE* wp = ::popen(which_cmd.c_str(), "r");
+            if (!wp) return "";
+            char wbuf[512] = {};
+            ::fgets(wbuf, sizeof(wbuf), wp);
+            ::pclose(wp);
+            std::string java_path(wbuf);
+            while (!java_path.empty() &&
+                   (java_path.back() == '\n' || java_path.back() == '\r'))
+                java_path.pop_back();
+            std::filesystem::path jp(java_path);
+            if (jp.has_parent_path() && jp.parent_path().has_parent_path()) {
+                return jp.parent_path().parent_path().string();
+            }
+            return "";
+        }
+    }
+    return "";  // No Java 21+ found
+}
 
 int main(int argc, char* argv[]) {
     CLI::App app{"codetldr-daemon — background analysis daemon for CodeTLDR"};
@@ -244,6 +313,61 @@ int main(int argc, char* argv[]) {
             } else {
                 spdlog::warn("LSP: kotlin-language-server found at {} but --version failed "
                              "— Kotlin LSP disabled", kls_path);
+            }
+        }
+
+        // jdtls for Java (JDT-01 through JDT-06)
+        std::string detected_java_home = detect_java_21_plus();
+        if (detected_java_home.empty()) {
+            // JDT-03: Java 21+ not found — register as unavailable with message
+            spdlog::warn("LSP: Java 21+ not detected (JAVA_HOME={}) — "
+                         "Java LSP (jdtls) disabled",
+                         (::getenv("JAVA_HOME") ? ::getenv("JAVA_HOME") : "not set"));
+            lsp_manager.register_unavailable_language(
+                "java",
+                "Java 21+ required (JAVA_HOME=" +
+                std::string(::getenv("JAVA_HOME") ? ::getenv("JAVA_HOME") : "not set") + ")");
+        } else {
+            std::string jdtls_path = find_binary("jdtls");
+            if (!jdtls_path.empty()) {
+                // Version probe: jdtls --version
+                std::string jdtls_cmd = jdtls_path + " --version 2>&1";
+                FILE* jdtls_pipe = ::popen(jdtls_cmd.c_str(), "r");
+                std::string jdtls_version;
+                if (jdtls_pipe) {
+                    char jdtls_buf[256];
+                    while (::fgets(jdtls_buf, sizeof(jdtls_buf), jdtls_pipe))
+                        jdtls_version += jdtls_buf;
+                    int jdtls_rc = ::pclose(jdtls_pipe);
+                    while (!jdtls_version.empty() &&
+                           (jdtls_version.back() == '\n' || jdtls_version.back() == '\r'))
+                        jdtls_version.pop_back();
+                    if (jdtls_rc != 0) jdtls_version.clear();
+                }
+                if (!jdtls_version.empty()) {
+                    // JDT-02: Compute per-project -data dir
+                    auto xdg = codetldr::resolve_xdg_paths();
+                    std::filesystem::path data_dir =
+                        xdg.cache_home / "jdtls-data" /
+                        sha256_string(project_root.string()).substr(0, 12);
+                    std::filesystem::create_directories(data_dir);
+
+                    codetldr::LspServerConfig jdtls_config;
+                    jdtls_config.command = jdtls_path;
+                    jdtls_config.args = {"-data", data_dir.string()};  // JDT-02
+                    jdtls_config.extensions = {".java"};
+                    jdtls_config.handshake_timeout_s = 180;             // JDT-06
+                    jdtls_config.extra_init_options =                    // JDT-05
+                        {{"java", {{"home", detected_java_home}}}};
+                    lsp_manager.register_language("java", jdtls_config);
+                    spdlog::info("LSP: registered jdtls {} at {} "
+                                 "(java_home={}, data_dir={}, timeout=180s)",
+                                 jdtls_version, jdtls_path,
+                                 detected_java_home, data_dir.string());
+                } else {
+                    spdlog::warn("LSP: jdtls found at {} but --version failed "
+                                 "— Java LSP disabled", jdtls_path);
+                }
             }
         }
 
