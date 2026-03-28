@@ -9,8 +9,10 @@
 #include <filesystem>
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 #include <vector>
 #include <string>
 
@@ -151,6 +153,13 @@ private:
 
     // LSP call hierarchy resolver — owning, injected by main.cpp (Phase 27)
     std::unique_ptr<LspCallHierarchyResolver> lsp_call_hierarchy_resolver_;
+
+    // Cold-start LSP resolution queue — populated once after set_detected_languages(),
+    // drained one file per language per tick() when all_backends_ready() (Phase 33)
+    bool cold_start_queues_populated_ = false;
+    bool cold_start_complete_ = false;
+    std::unordered_map<std::string,
+        std::deque<std::pair<std::string, int64_t>>> cold_start_queues_;
 };
 
 
