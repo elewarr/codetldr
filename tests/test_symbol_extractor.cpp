@@ -210,6 +210,7 @@ static bool test_all_languages_extract_symbols(const LanguageRegistry& reg) {
         {".kt",    "sample.kt"},
         {".swift", "sample.swift"},
         {".m",     "sample.m"},
+        {".rb",    "sample.rb"},
     };
 
     for (const auto& fix : fixtures) {
@@ -268,6 +269,7 @@ static bool test_all_languages_extract_calls(const LanguageRegistry& reg) {
         {".kt",    "sample.kt"},
         {".swift", "sample.swift"},
         {".m",     "sample.m"},
+        {".rb",    "sample.rb"},
     };
 
     for (const auto& fix : fixtures) {
@@ -358,6 +360,53 @@ static bool test_symbol_kinds_correct(const LanguageRegistry& reg) {
 }
 
 // ============================================================
+// test_ruby_symbol_kinds
+// ============================================================
+static bool test_ruby_symbol_kinds(const LanguageRegistry& reg) {
+    std::string test_name = "test_ruby_symbol_kinds";
+    auto entry = reg.for_extension(".rb");
+    if (!entry) {
+        std::cerr << "[FAIL] " << test_name << ": no entry for .rb\n";
+        return false;
+    }
+
+    auto path = fixture_dir() / "sample.rb";
+    auto source = read_file(path);
+    if (source.empty()) {
+        std::cerr << "[FAIL] " << test_name << ": empty source\n";
+        return false;
+    }
+
+    auto tree = parse_source(entry->language, source);
+    if (!tree) {
+        std::cerr << "[FAIL] " << test_name << ": parse failed\n";
+        return false;
+    }
+
+    auto syms = extract_symbols(tree.get(), entry->symbol_query.get(), source);
+
+    bool found_method = false;
+    bool found_class = false;
+    for (const auto& s : syms) {
+        if (s.kind == "method") found_method = true;
+        if (s.kind == "class") found_class = true;
+    }
+
+    bool ok = true;
+    if (!found_method) {
+        std::cerr << "[FAIL] " << test_name << ": no symbol with kind='method'\n";
+        ok = false;
+    }
+    if (!found_class) {
+        std::cerr << "[FAIL] " << test_name << ": no symbol with kind='class'\n";
+        ok = false;
+    }
+
+    if (ok) std::cout << "[PASS] " << test_name << "\n";
+    return ok;
+}
+
+// ============================================================
 // main
 // ============================================================
 int main() {
@@ -373,6 +422,7 @@ int main() {
     all_pass &= test_all_languages_extract_symbols(reg);
     all_pass &= test_all_languages_extract_calls(reg);
     all_pass &= test_symbol_kinds_correct(reg);
+    all_pass &= test_ruby_symbol_kinds(reg);
 
     if (all_pass) {
         std::cout << "\nAll tests PASSED\n";
