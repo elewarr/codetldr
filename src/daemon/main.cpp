@@ -160,6 +160,33 @@ int main(int argc, char* argv[]) {
             spdlog::info("LSP: registered typescript-language-server at {}", tsserver_path);
         }
 
+        // rust-analyzer for Rust (RUST-01, RUST-02)
+        std::string ra_path = find_binary("rust-analyzer");
+        if (!ra_path.empty()) {
+            // Version probe: distinguishes real rust-analyzer from rustup proxy stub.
+            // Proxy stub exits non-zero with "error: Unknown binary..." — real binary exits 0.
+            std::string ra_cmd = ra_path + " --version 2>&1";
+            FILE* ra_pipe = ::popen(ra_cmd.c_str(), "r");
+            std::string ra_version;
+            if (ra_pipe) {
+                char ra_buf[256];
+                while (::fgets(ra_buf, sizeof(ra_buf), ra_pipe)) ra_version += ra_buf;
+                int ra_rc = ::pclose(ra_pipe);
+                while (!ra_version.empty() &&
+                       (ra_version.back() == '\n' || ra_version.back() == '\r')) {
+                    ra_version.pop_back();
+                }
+                if (ra_rc != 0) ra_version.clear();  // proxy stub failure
+            }
+            if (!ra_version.empty()) {
+                lsp_manager.register_language("rust", {ra_path, {}, {".rs"}});
+                spdlog::info("LSP: registered rust-analyzer {} at {}", ra_version, ra_path);
+            } else {
+                spdlog::warn("LSP: rust-analyzer found at {} but --version failed "
+                             "(rustup component not installed?) — Rust LSP disabled", ra_path);
+            }
+        }
+
         lsp_manager.set_project_root(project_root);
         coordinator.set_lsp_manager(&lsp_manager);
 
