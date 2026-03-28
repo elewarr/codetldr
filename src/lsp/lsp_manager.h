@@ -29,6 +29,7 @@ struct LspServerConfig {
     std::vector<std::string> args;       // e.g. {"--background-index"}
     std::vector<std::string> extensions; // e.g. {".cpp", ".h", ".c"}
     int handshake_timeout_s = 0;         // 0 = use transport default (30s); INFRA-03
+    nlohmann::json extra_init_options;   // null by default; merged into initializationOptions
 };
 
 class LspManager {
@@ -42,6 +43,8 @@ public:
     LspManager& operator=(const LspManager&) = delete;
 
     void register_language(const std::string& language, LspServerConfig config);
+    void register_unavailable_language(const std::string& language,
+                                       const std::string& reason);
     void set_detected_languages(const std::vector<std::string>& languages);
     bool ensure_server(const std::string& language);
     LspTransport* get_transport(const std::string& language);
@@ -72,6 +75,12 @@ public:
     void shutdown();
     void check_timeouts();
 
+    // Build LSP initialize params per LSP 3.17 spec.
+    // Public static for testability — Plan 02 tests call this directly.
+    static nlohmann::json make_initialize_params(const std::string& language,
+                                                  const std::filesystem::path& project_root,
+                                                  const nlohmann::json& extra_init_options = {});
+
     static constexpr int kMaxCrashesInWindow = 5;
     static constexpr std::chrono::seconds kCrashWindow{180};
     static constexpr std::chrono::seconds kBackoffMin{1};
@@ -95,14 +104,11 @@ private:
         std::vector<std::function<void()>> pending_requests;
         // Per-session tracking of opened URIs, cleared on crash/restart
         std::unordered_set<std::string> opened_uris;
+        std::string unavailable_reason;  // Set by register_unavailable_language()
     };
 
     bool try_spawn(ServerEntry& entry, const std::string& language);
     void handle_crash(ServerEntry& entry, const std::string& language, Clock::time_point now);
-
-    // Build LSP initialize params per LSP 3.17 spec
-    static nlohmann::json make_initialize_params(const std::string& language,
-                                                  const std::filesystem::path& project_root);
 
     // Probe filesystem for compile_commands.json after clangd reaches kReady.
     // Sets entry state to kDegraded with warning if not found.
