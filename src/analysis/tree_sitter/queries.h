@@ -238,4 +238,23 @@ inline LanguageQueries objc() {
     };
 }
 
+inline LanguageQueries ruby() {
+    return {
+        // symbols — use (_) wildcard for method name: Ruby's method name is polymorphic
+        // (identifier, setter, operator, constant — must use (_) wildcard)
+        "(method name: (_) @name) @definition.method\n"
+        "(singleton_method name: (_) @name) @definition.method\n"
+        "(class name: (constant) @name) @definition.class\n"
+        "(class name: (scope_resolution name: (constant) @name)) @definition.class\n"
+        "(module name: (constant) @name) @definition.class\n"
+        "(module name: (scope_resolution name: (constant) @name)) @definition.class\n",
+        // calls — Ruby method calls: obj.method(args) uses (call method: ...)
+        "(call method: (_) @name) @reference.call\n",
+        // cfg — no CFG support for Ruby
+        nullptr,
+        // dfg — no DFG support for Ruby
+        nullptr
+    };
+}
+
 } // namespace codetldr::queries

@@ -236,6 +236,18 @@ FetchContent_MakeAvailable(ts_objc)
 add_tree_sitter_grammar(objc ${ts_objc_SOURCE_DIR})
 
 # ============================================================
+# Grammar: Ruby
+# ============================================================
+FetchContent_Declare(ts_ruby
+    GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-ruby.git
+    GIT_TAG        v0.23.1
+    GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR  "__no_cmake__"
+)
+FetchContent_MakeAvailable(ts_ruby)
+add_tree_sitter_grammar(ruby ${ts_ruby_SOURCE_DIR})
+
+# ============================================================
 # efsw — cross-platform file system watcher
 # macOS FSEvents + Linux inotify in one API
 # ============================================================
