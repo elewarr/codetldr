@@ -581,6 +581,93 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
             response["error"] = error;
         }
 
+    } else if (method == "get_dependencies") {
+        try {
+            const auto& params = req.contains("params") ? req["params"] : nlohmann::json::object();
+
+            if (!params.contains("file") || !params["file"].is_string()) {
+                nlohmann::json error;
+                error["code"]    = -32602;
+                error["message"] = "file required";
+                response["error"] = error;
+            } else {
+                std::string file = params["file"].get<std::string>();
+
+                nlohmann::json result;
+                result["file"] = file;
+
+                // Look up file_id from files table
+                int64_t file_id = -1;
+                try {
+                    SQLite::Statement q(db_, "SELECT id FROM files WHERE path = ?");
+                    q.bind(1, file);
+                    if (q.executeStep()) {
+                        file_id = q.getColumn(0).getInt64();
+                    }
+                } catch (...) {}
+
+                if (file_id < 0) {
+                    result["found"]       = false;
+                    result["imports"]     = nlohmann::json::array();
+                    result["imported_by"] = nlohmann::json::array();
+                } else {
+                    result["found"] = true;
+
+                    // Query imports (what this file imports)
+                    {
+                        nlohmann::json arr = nlohmann::json::array();
+                        try {
+                            SQLite::Statement q(db_, R"sql(
+                                SELECT import_line, import_kind, target_file_path,
+                                       COALESCE((SELECT f.path FROM files f WHERE f.id = d.target_file_id), d.target_file_path) as resolved_path
+                                FROM lsp_dependencies d
+                                WHERE d.importer_file_id = ?
+                                ORDER BY d.import_line
+                            )sql");
+                            q.bind(1, file_id);
+                            while (q.executeStep()) {
+                                nlohmann::json item;
+                                item["file"] = q.getColumn(3).isNull() ? "" : q.getColumn(3).getString();
+                                item["kind"] = q.getColumn(1).getString();
+                                item["line"] = q.getColumn(0).getInt();
+                                arr.push_back(std::move(item));
+                            }
+                        } catch (...) {}
+                        result["imports"] = std::move(arr);
+                    }
+
+                    // Query imported_by (what files import this one)
+                    {
+                        nlohmann::json arr = nlohmann::json::array();
+                        try {
+                            SQLite::Statement q(db_, R"sql(
+                                SELECT f.path as importer_path, d.import_line
+                                FROM lsp_dependencies d
+                                JOIN files f ON d.importer_file_id = f.id
+                                WHERE d.target_file_id = ?
+                                ORDER BY f.path
+                            )sql");
+                            q.bind(1, file_id);
+                            while (q.executeStep()) {
+                                nlohmann::json item;
+                                item["file"] = q.getColumn(0).getString();
+                                item["line"] = q.getColumn(1).getInt();
+                                arr.push_back(std::move(item));
+                            }
+                        } catch (...) {}
+                        result["imported_by"] = std::move(arr);
+                    }
+                }
+
+                response["result"] = std::move(result);
+            }
+        } catch (const std::exception& e) {
+            nlohmann::json error;
+            error["code"]    = -32000;
+            error["message"] = e.what();
+            response["error"] = error;
+        }
+
     } else if (method == "get_project_overview") {
         try {
             nlohmann::json result;
