@@ -6,6 +6,7 @@
 #include "embedding/vector_store.h"
 #include "lsp/lsp_manager.h"
 #include "lsp/lsp_call_graph_resolver.h"
+#include "lsp/lsp_dependency_resolver.h"
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <spdlog/spdlog.h>
 #include <poll.h>
@@ -303,9 +304,9 @@ void Coordinator::run() {
             for (const auto& path : ready_paths) {
                 spdlog::info("Coordinator: re-indexing {}", path);
                 try {
-                    // Phase 26: Read old content_hash BEFORE analyze_file overwrites it
+                    // Phase 26/27: Read old content_hash BEFORE analyze_file overwrites it
                     std::string old_hash;
-                    if (lsp_resolver_) {
+                    if (lsp_resolver_ || lsp_dependency_resolver_) {
                         try {
                             SQLite::Statement q(db_,
                                 "SELECT content_hash FROM files WHERE path = ?");
@@ -322,8 +323,9 @@ void Coordinator::run() {
                                      path, result.symbols_count, result.calls_count);
                         current_status_.files_indexed++;
 
-                        // Phase 26: trigger LSP resolution if content changed
-                        if (lsp_resolver_ && !result.content_hash.empty() &&
+                        // Phase 26/27: trigger LSP resolution if content changed
+                        if ((lsp_resolver_ || lsp_dependency_resolver_) &&
+                            !result.content_hash.empty() &&
                             (old_hash.empty() || old_hash != result.content_hash)) {
                             try {
                                 SQLite::Statement q(db_,
@@ -334,8 +336,14 @@ void Coordinator::run() {
                                     std::string lang = q.getColumn(1).isNull()
                                         ? "" : q.getColumn(1).getString();
                                     if (!lang.empty()) {
-                                        lsp_resolver_->resolve_file(
-                                            std::filesystem::path(path), file_id, lang);
+                                        if (lsp_resolver_) {
+                                            lsp_resolver_->resolve_file(
+                                                std::filesystem::path(path), file_id, lang);
+                                        }
+                                        if (lsp_dependency_resolver_) {
+                                            lsp_dependency_resolver_->resolve_dependencies(
+                                                std::filesystem::path(path), file_id, lang);
+                                        }
                                     }
                                 }
                             } catch (const std::exception& ex) {
@@ -383,6 +391,10 @@ void Coordinator::run() {
 
 void Coordinator::set_lsp_resolver(std::unique_ptr<LspCallGraphResolver> resolver) {
     lsp_resolver_ = std::move(resolver);
+}
+
+void Coordinator::set_lsp_dependency_resolver(std::unique_ptr<LspDependencyResolver> resolver) {
+    lsp_dependency_resolver_ = std::move(resolver);
 }
 
 void Coordinator::process_file_events() {

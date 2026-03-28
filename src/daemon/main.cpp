@@ -6,6 +6,7 @@
 #include "analysis/tree_sitter/language_registry.h"
 #include "lsp/lsp_manager.h"
 #include "lsp/lsp_call_graph_resolver.h"
+#include "lsp/lsp_dependency_resolver.h"
 
 #include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
@@ -150,6 +151,11 @@ int main(int argc, char* argv[]) {
         auto lsp_resolver = std::make_unique<codetldr::LspCallGraphResolver>(
             db.raw(), lsp_manager);
         coordinator.set_lsp_resolver(std::move(lsp_resolver));
+
+        // Phase 27: LSP dependency resolver
+        auto lsp_dep_resolver = std::make_unique<codetldr::LspDependencyResolver>(
+            db.raw(), lsp_manager);
+        coordinator.set_lsp_dependency_resolver(std::move(lsp_dep_resolver));
 
         coordinator.run();
 

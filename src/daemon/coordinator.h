@@ -23,6 +23,7 @@ namespace codetldr {
     class ModelManager;
     class LspManager;
     class LspCallGraphResolver;
+    class LspDependencyResolver;
 }
 
 namespace codetldr {
@@ -90,6 +91,9 @@ public:
     // Inject LSP call graph resolver (owning). Call before run(). (Phase 26)
     void set_lsp_resolver(std::unique_ptr<LspCallGraphResolver> resolver);
 
+    // Inject LSP dependency resolver (owning). Call before run(). (Phase 27)
+    void set_lsp_dependency_resolver(std::unique_ptr<LspDependencyResolver> resolver);
+
 private:
     void shutdown();
     void process_file_events();
@@ -133,6 +137,9 @@ private:
 
     // LSP call graph resolver — owning, injected by main.cpp (Phase 26)
     std::unique_ptr<LspCallGraphResolver> lsp_resolver_;
+
+    // LSP dependency resolver — owning, injected by main.cpp (Phase 27)
+    std::unique_ptr<LspDependencyResolver> lsp_dependency_resolver_;
 };
 
 

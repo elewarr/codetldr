@@ -105,10 +105,13 @@ add_library(codetldr_lsp STATIC
   src/lsp/lsp_manager.cpp
   src/lsp/lsp_call_graph_resolver.cpp
   src/lsp/lsp_call_hierarchy_resolver.cpp
+  src/lsp/lsp_dependency_resolver.cpp
 )
 target_include_directories(codetldr_lsp PUBLIC src)
 target_link_libraries(codetldr_lsp
-  PUBLIC nlohmann_json::nlohmann_json spdlog::spdlog SQLiteCpp)
+  PUBLIC nlohmann_json::nlohmann_json spdlog::spdlog SQLiteCpp tree_sitter_lib
+  PRIVATE ts_grammar_python ts_grammar_javascript ts_grammar_typescript
+          ts_grammar_c ts_grammar_cpp)
 
 enable_testing()
 
@@ -139,6 +142,10 @@ add_test(NAME schema_lsp_tables COMMAND test_schema_lsp_tables)
 add_executable(test_lsp_call_graph tests/test_lsp_call_graph.cpp)
 target_link_libraries(test_lsp_call_graph PRIVATE codetldr_lsp codetldr_foundation)
 add_test(NAME lsp_call_graph COMMAND test_lsp_call_graph)
+
+add_executable(test_lsp_dependencies tests/test_lsp_dependencies.cpp)
+target_link_libraries(test_lsp_dependencies PRIVATE codetldr_lsp codetldr_foundation)
+add_test(NAME lsp_dependencies COMMAND test_lsp_dependencies)
 
 add_executable(test_tree_sitter_parser tests/test_tree_sitter_parser.cpp)
 target_link_libraries(test_tree_sitter_parser PRIVATE codetldr_analysis)
