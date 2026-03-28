@@ -2,6 +2,7 @@
 
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <array>
 #include <fstream>
 #include <sstream>
 #include <sys/wait.h>
@@ -205,6 +206,9 @@ bool LspManager::try_spawn(ServerEntry& entry, const std::string& language) {
             }
             if (language == "kotlin") {
                 check_kotlin_build(e);
+            }
+            if (language == "java") {
+                check_java_build(e);
             }
         });
 
@@ -519,6 +523,25 @@ void LspManager::check_kotlin_build(ServerEntry& entry) {
                  "or pom.xml found at {} — workspace features may be limited",
                  project_root_.string());
     // Do NOT set kDegraded: kotlin-language-server can operate without build files.
+}
+
+void LspManager::check_java_build(ServerEntry& entry) {
+    (void)entry;  // No state change — jdtls does not require build files
+    static const std::array<const char*, 3> kJavaBuildFiles = {
+        "pom.xml",
+        "build.gradle",
+        "build.gradle.kts"
+    };
+    for (const char* fname : kJavaBuildFiles) {
+        if (std::filesystem::exists(project_root_ / fname)) {
+            spdlog::info("LspManager: jdtls workspace root confirmed ({} at {})",
+                         fname, project_root_.string());
+            return;
+        }
+    }
+    spdlog::warn("LspManager: jdtls: no pom.xml, build.gradle, or build.gradle.kts found "
+                 "at {} — workspace-level features may be limited", project_root_.string());
+    // Do NOT set kDegraded: jdtls can still serve single-file Java analysis.
 }
 
 void LspManager::ensure_document_open(const std::string& language,
