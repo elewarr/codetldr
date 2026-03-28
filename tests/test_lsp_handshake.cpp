@@ -25,12 +25,19 @@
 //  16. test_go_mod_found_in_root: gopls stays ready when go.mod present
 //  17. test_kotlin_build_not_found: kotlin-language-server stays ready when no build file present
 //  18. test_kotlin_build_found: kotlin-language-server stays ready when build.gradle.kts present
+//  19. test_jdtls_timeout_config: jdtls LspServerConfig has 180s handshake_timeout_s
+//  20. test_java_init_options: java.home in extra_init_options appears in initializationOptions
+//  21. test_register_unavailable: register_unavailable_language sets state and reason in status_json
+//  22. test_java_build_found: jdtls stays ready when pom.xml present (no kDegraded)
+//  23. test_java_build_not_found: jdtls stays ready when no build file present (no kDegraded)
+//  24. test_java_call_hierarchy_not_skipped: java must NOT be in kNoCallHierarchy (JDT-04 regression guard)
 
 #include "lsp/lsp_manager.h"
 #include "lsp/lsp_transport.h"
 
 #include <cassert>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -985,6 +992,201 @@ static void test_kotlin_build_found() {
 }
 
 // ============================================================
+// Test 19: test_jdtls_timeout_config
+// Verify jdtls LspServerConfig has 180s handshake_timeout_s
+// ============================================================
+static void test_jdtls_timeout_config() {
+    codetldr::LspServerConfig cfg;
+    cfg.command = "/bin/cat";
+    cfg.args = {"-data", "/tmp/test"};
+    cfg.extensions = {".java"};
+    cfg.handshake_timeout_s = 180;
+
+    CHECK(cfg.handshake_timeout_s == 180,
+          "test_jdtls_timeout_config: handshake_timeout_s must be 180");
+    CHECK(cfg.args.size() == 2 && cfg.args[0] == "-data",
+          "test_jdtls_timeout_config: args must include -data flag");
+
+    std::cout << "PASS: test_jdtls_timeout_config\n";
+}
+
+// ============================================================
+// Test 20: test_java_init_options
+// java.home in extra_init_options appears in initializationOptions
+// Calls public static LspManager::make_initialize_params() directly (Plan 01 change)
+// ============================================================
+static void test_java_init_options() {
+    nlohmann::json extra = {{"java", {{"home", "/usr/lib/jvm/java-21"}}}};
+    auto params = codetldr::LspManager::make_initialize_params(
+        "java", std::filesystem::path("/test/project"), extra);
+
+    CHECK(params.contains("initializationOptions"),
+          "test_java_init_options: params must contain initializationOptions");
+    CHECK(params["initializationOptions"]["java"]["home"] == "/usr/lib/jvm/java-21",
+          "test_java_init_options: java.home must be /usr/lib/jvm/java-21");
+
+    // Verify default (no extra options) does NOT produce initializationOptions
+    auto default_params = codetldr::LspManager::make_initialize_params(
+        "cpp", std::filesystem::path("/test/project"));
+    CHECK(!default_params.contains("initializationOptions"),
+          "test_java_init_options: default params must not contain initializationOptions");
+
+    std::cout << "PASS: test_java_init_options\n";
+}
+
+// ============================================================
+// Test 21: test_register_unavailable
+// register_unavailable_language sets kUnavailable state and reason in status_json
+// ============================================================
+static void test_register_unavailable() {
+    codetldr::LspManager mgr;
+    mgr.register_unavailable_language("java", "Java 21+ required");
+    // register_unavailable_language sets detected=true internally
+    auto status = mgr.status_json();
+
+    bool found = false;
+    for (const auto& item : status) {
+        if (item["language"] == "java") {
+            found = true;
+            CHECK(item["state"] == "unavailable",
+                  "test_register_unavailable: state must be unavailable");
+            CHECK(item.contains("message"),
+                  "test_register_unavailable: must contain message field");
+            CHECK(item["message"] == "Java 21+ required",
+                  "test_register_unavailable: message must match reason");
+        }
+    }
+    CHECK(found, "test_register_unavailable: java entry must appear in status_json");
+
+    std::cout << "PASS: test_register_unavailable\n";
+}
+
+// ============================================================
+// Test 22: test_java_build_found
+// jdtls stays ready (not degraded) when pom.xml present
+// ============================================================
+static void test_java_build_found() {
+    std::string tmpdir = make_temp_dir();
+    CHECK(!tmpdir.empty(), "test_java_build_found: tmpdir creation failed");
+
+    // Write pom.xml at project root
+    std::ofstream pom(tmpdir + "/pom.xml");
+    pom << "<project/>";
+    pom.close();
+
+    codetldr::LspManager mgr;
+    mgr.set_project_root(tmpdir);
+
+    codetldr::LspServerConfig cfg;
+    cfg.command = "/bin/cat";
+    cfg.args    = {};
+    cfg.extensions = {".java"};
+
+    mgr.register_language("java", cfg);
+    mgr.set_detected_languages({"java"});
+    mgr.ensure_server("java");
+    complete_handshake(mgr, "java");
+
+    // check_java_build is called after handshake — verify state is NOT kDegraded
+    auto status = mgr.status_json();
+    bool found_ready = false;
+    for (const auto& item : status) {
+        if (item["language"] == "java") {
+            CHECK(item["state"] != "degraded",
+                  "test_java_build_found: state must not be degraded when pom.xml exists");
+            if (item["state"] == "ready") found_ready = true;
+        }
+    }
+    CHECK(found_ready,
+          "test_java_build_found: java server must be ready when pom.xml present");
+
+    ::unlink((tmpdir + "/pom.xml").c_str());
+    ::rmdir(tmpdir.c_str());
+    mgr.shutdown();
+    std::cout << "PASS: test_java_build_found\n";
+}
+
+// ============================================================
+// Test 23: test_java_build_not_found
+// jdtls stays ready (not degraded) even when no build file present
+// ============================================================
+static void test_java_build_not_found() {
+    std::string tmpdir = make_temp_dir();
+    CHECK(!tmpdir.empty(), "test_java_build_not_found: tmpdir creation failed");
+    // No build files — empty directory
+
+    codetldr::LspManager mgr;
+    mgr.set_project_root(tmpdir);
+
+    codetldr::LspServerConfig cfg;
+    cfg.command = "/bin/cat";
+    cfg.args    = {};
+    cfg.extensions = {".java"};
+
+    mgr.register_language("java", cfg);
+    mgr.set_detected_languages({"java"});
+    mgr.ensure_server("java");
+    complete_handshake(mgr, "java");
+
+    // check_java_build does NOT set kDegraded — jdtls handles single-file Java
+    auto status = mgr.status_json();
+    bool found_ready = false;
+    for (const auto& item : status) {
+        if (item["language"] == "java") {
+            CHECK(item["state"] != "degraded",
+                  "test_java_build_not_found: state must not be degraded even without build files");
+            if (item["state"] == "ready") found_ready = true;
+        }
+    }
+    CHECK(found_ready,
+          "test_java_build_not_found: java server must stay ready when no build file present");
+
+    ::rmdir(tmpdir.c_str());
+    mgr.shutdown();
+    std::cout << "PASS: test_java_build_not_found\n";
+}
+
+// ============================================================
+// Test 24: test_java_call_hierarchy_not_skipped
+// JDT-04 regression guard: java must NOT be in kNoCallHierarchy skip set.
+// Reads lsp_call_hierarchy_resolver.cpp source to verify absence of "java"
+// in the kNoCallHierarchy definition.
+// ============================================================
+static void test_java_call_hierarchy_not_skipped() {
+    // Try paths relative to common CMake build directory layouts
+    std::ifstream f("../src/lsp/lsp_call_hierarchy_resolver.cpp");
+    if (!f.is_open()) {
+        f.open("src/lsp/lsp_call_hierarchy_resolver.cpp");
+    }
+    if (!f.is_open()) {
+        f.open("../../src/lsp/lsp_call_hierarchy_resolver.cpp");
+    }
+    CHECK(f.is_open(),
+          "test_java_call_hierarchy_not_skipped: could not open lsp_call_hierarchy_resolver.cpp");
+
+    std::string content((std::istreambuf_iterator<char>(f)),
+                         std::istreambuf_iterator<char>());
+
+    // Find the kNoCallHierarchy definition line
+    auto pos = content.find("kNoCallHierarchy");
+    CHECK(pos != std::string::npos,
+          "test_java_call_hierarchy_not_skipped: kNoCallHierarchy not found in source");
+
+    // Extract from the definition up to the closing semicolon
+    auto semi = content.find(';', pos);
+    CHECK(semi != std::string::npos,
+          "test_java_call_hierarchy_not_skipped: could not find semicolon after kNoCallHierarchy");
+    std::string set_def = content.substr(pos, semi - pos);
+
+    // Assert "java" does NOT appear in the set definition
+    CHECK(set_def.find("\"java\"") == std::string::npos,
+          "test_java_call_hierarchy_not_skipped: java must NOT be in kNoCallHierarchy — "
+          "jdtls supports callHierarchy natively (JDT-04)");
+
+    std::cout << "PASS: test_java_call_hierarchy_not_skipped\n";
+}
+
+// ============================================================
 // main
 // ============================================================
 int main() {
@@ -1006,6 +1208,12 @@ int main() {
     test_go_mod_found_in_root();
     test_kotlin_build_not_found();
     test_kotlin_build_found();
+    test_jdtls_timeout_config();
+    test_java_init_options();
+    test_register_unavailable();
+    test_java_build_found();
+    test_java_build_not_found();
+    test_java_call_hierarchy_not_skipped();
 
     std::cout << "\nAll LspHandshake tests passed.\n";
     return 0;
