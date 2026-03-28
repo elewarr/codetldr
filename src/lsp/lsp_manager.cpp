@@ -210,6 +210,9 @@ bool LspManager::try_spawn(ServerEntry& entry, const std::string& language) {
             if (language == "java") {
                 check_java_build(e);
             }
+            if (language == "ruby") {
+                check_ruby_gemfile(e);
+            }
         });
 
     return true;
@@ -555,6 +558,24 @@ void LspManager::check_java_build(ServerEntry& entry) {
     spdlog::warn("LspManager: jdtls: no pom.xml, build.gradle, or build.gradle.kts found "
                  "at {} — workspace-level features may be limited", project_root_.string());
     // Do NOT set kDegraded: jdtls can still serve single-file Java analysis.
+}
+
+void LspManager::check_ruby_gemfile(ServerEntry& entry) {
+    (void)entry;  // No state change — ruby-lsp supports standalone .rb files
+
+    // RUBY-LSP-05: Walk up from project_root_ to find nearest Gemfile
+    std::filesystem::path search = project_root_;
+    while (search.has_parent_path() && search != search.parent_path()) {
+        if (std::filesystem::exists(search / "Gemfile")) {
+            spdlog::info("LspManager: ruby-lsp workspace root confirmed (Gemfile at {})",
+                         search.string());
+            return;
+        }
+        search = search.parent_path();
+    }
+    spdlog::warn("LspManager: ruby-lsp: no Gemfile found at {} or any parent -- "
+                 "standalone mode (workspace features limited)", project_root_.string());
+    // Do NOT set kDegraded: ruby-lsp works on standalone .rb files.
 }
 
 void LspManager::ensure_document_open(const std::string& language,

@@ -137,6 +137,11 @@ private:
     // Logs warning if not found but does NOT set kDegraded (jdtls handles single-file Java).
     void check_java_build(ServerEntry& entry);
 
+    // Probe filesystem for Gemfile after ruby-lsp reaches kReady.
+    // Walks up from project_root_ to find nearest Gemfile.
+    // Logs warning if not found but does NOT set kDegraded (ruby-lsp supports standalone .rb files).
+    void check_ruby_gemfile(ServerEntry& entry);
+
     // Map file extension to LSP languageId string.
     static std::string language_id_for(const std::filesystem::path& path);
 
