@@ -22,14 +22,14 @@ namespace fs = std::filesystem;
 
 // ---------------------------------------------------------------------------
 // Helper: make_tools_list_response
-// Build all 9 MCP tool definitions with inputSchema and wrap in JSON-RPC envelope.
+// Build all 11 MCP tool definitions with inputSchema and wrap in JSON-RPC envelope.
 // ---------------------------------------------------------------------------
 static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
     nlohmann::json tools = nlohmann::json::array();
 
     tools.push_back({
         {"name", "search_symbols"},
-        {"description", "Search for symbols (functions, classes, methods) by name using FTS5 full-text search with BM25 ranking. Returns ranked results with file path, line number, signature, and documentation."},
+        {"description", "Search for symbols (functions, classes, methods) by name using FTS5 full-text search with BM25 ranking, with workspace/symbol LSP fast path when available. Response shape: {results: [{file_path, line, name, kind, signature, documentation}], search_source: \"workspace-symbol\"|\"fts5\", query: string}."},
         {"inputSchema", {
             {"type", "object"},
             {"properties", {
@@ -138,6 +138,38 @@ static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
         }}
     });
 
+    tools.push_back({
+        {"name", "get_incoming_callers"},
+        {"description", "Get the list of callers for a symbol using LSP call hierarchy "
+                        "(callHierarchy/incomingCalls). Returns caller name, kind, file path, "
+                        "and call site location. Falls back to lsp_references, then Tree-sitter "
+                        "approximate data. Response shape: {name, found, callers: [{name, kind, "
+                        "file, line, col, source}], source}."},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"name", {{"type","string"},{"description","Symbol name to find callers of"}}},
+                {"file", {{"type","string"},{"description","Scope to this file path (optional)"}}}
+            }},
+            {"required", nlohmann::json::array({"name"})}
+        }}
+    });
+
+    tools.push_back({
+        {"name", "get_dependencies"},
+        {"description", "Get cross-file import/include/require dependencies for a file. "
+                        "Returns which files this file imports and which files import it, "
+                        "resolved via LSP with Tree-sitter fallback. Response shape: "
+                        "{file, found, imports: [{file, kind, line}], imported_by: [{file, line}]}."},
+        {"inputSchema", {
+            {"type", "object"},
+            {"properties", {
+                {"file", {{"type","string"},{"description","Absolute or project-relative file path"}}}
+            }},
+            {"required", nlohmann::json::array({"file"})}
+        }}
+    });
+
     return nlohmann::json{
         {"jsonrpc", "2.0"},
         {"id",      id},
@@ -183,6 +215,10 @@ static nlohmann::json dispatch_tool_call(const std::string& tool_name,
             daemon_resp = client.call("get_data_flow", arguments);
         } else if (tool_name == "get_embedding_stats") {
             daemon_resp = client.call("get_embedding_stats", nlohmann::json::object());
+        } else if (tool_name == "get_incoming_callers") {
+            daemon_resp = client.call("get_incoming_callers", arguments);
+        } else if (tool_name == "get_dependencies") {
+            daemon_resp = client.call("get_dependencies", arguments);
         } else {
             return {
                 {"content", {{{"type","text"},{"text","Unknown tool: " + tool_name}}}},
