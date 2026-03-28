@@ -257,4 +257,24 @@ inline LanguageQueries ruby() {
     };
 }
 
+inline LanguageQueries lua() {
+    return {
+        // symbols -- 3 forms of function_declaration name:
+        // Form 1: Plain identifier: function foo() end
+        "(function_declaration name: (identifier) @name) @definition.function\n"
+        // Form 2: Dot index (table method): function M.foo() end
+        "(function_declaration name: (dot_index_expression field: (identifier) @name)) @definition.method\n"
+        // Form 3: Colon method: function M:foo() end
+        "(function_declaration name: (method_index_expression method: (identifier) @name)) @definition.method\n",
+        // calls -- Lua uses function_call node (NOT call_expression)
+        "(function_call name: (identifier) @name) @reference.call\n"
+        "(function_call name: (dot_index_expression field: (identifier) @name)) @reference.call\n"
+        "(function_call name: (method_index_expression method: (identifier) @name)) @reference.call\n",
+        // cfg -- no CFG support for Lua
+        nullptr,
+        // dfg -- no DFG support for Lua
+        nullptr
+    };
+}
+
 } // namespace codetldr::queries

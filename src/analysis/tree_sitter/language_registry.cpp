@@ -18,6 +18,7 @@ const TSLanguage* tree_sitter_kotlin(void);
 const TSLanguage* tree_sitter_swift(void);
 const TSLanguage* tree_sitter_objc(void);
 const TSLanguage* tree_sitter_ruby(void);
+const TSLanguage* tree_sitter_lua(void);
 }
 
 namespace codetldr {
@@ -64,6 +65,9 @@ bool LanguageRegistry::initialize() {
     q = queries::ruby();
     ok &= register_language("ruby", tree_sitter_ruby(), q.symbols, q.calls, q.cfg, q.dfg);
 
+    q = queries::lua();
+    ok &= register_language("lua", tree_sitter_lua(), q.symbols, q.calls, q.cfg, q.dfg);
+
     // Extension -> language mappings
     ext_to_lang_[".py"]  = "python";
     ext_to_lang_[".pyi"] = "python";
@@ -102,6 +106,8 @@ bool LanguageRegistry::initialize() {
     ext_to_lang_[".rake"]    = "ruby";
     ext_to_lang_[".gemspec"] = "ruby";
     ext_to_lang_[".ru"]      = "ruby";
+
+    ext_to_lang_[".lua"] = "lua";
 
     return ok;
 }
