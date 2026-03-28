@@ -91,6 +91,21 @@ int main(int argc, char* argv[]) {
         spdlog::info("Socket: {}", sock_path.string());
         spdlog::info("PID: {}", static_cast<int>(::getpid()));
 
+        // Environment probe for language toolchains (INFRA-04)
+        {
+            auto log_env = [](const char* var) {
+                const char* val = ::getenv(var);
+                if (val && val[0] != '\0') {
+                    spdlog::info("Env: {}={}", var, val);
+                } else {
+                    spdlog::warn("Env: {} not set", var);
+                }
+            };
+            log_env("CARGO_HOME");
+            log_env("GOPATH");
+            log_env("JAVA_HOME");
+        }
+
         // Create coordinator
         codetldr::Coordinator coordinator(project_root, db.raw(), registry, sock_path);
 
