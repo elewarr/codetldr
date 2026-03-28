@@ -199,9 +199,10 @@ int LspDependencyResolver::resolve_dependencies(
         return 0;
     }
 
-    // Run the query and collect import line numbers
+    // Run the query and collect import line numbers and raw text
     struct ImportInfo {
-        int line;  // 1-indexed
+        int line;          // 1-indexed
+        std::string text;  // raw import path text from Tree-sitter node
     };
     std::vector<ImportInfo> imports;
 
@@ -220,7 +221,16 @@ int LspDependencyResolver::resolve_dependencies(
                 TSPoint start = ts_node_start_point(cap.node);
                 // Tree-sitter is 0-indexed; convert to 1-indexed
                 int line = static_cast<int>(start.row) + 1;
-                imports.push_back({line});
+                // Extract the raw import path text from the node
+                uint32_t start_byte = ts_node_start_byte(cap.node);
+                uint32_t end_byte = ts_node_end_byte(cap.node);
+                std::string text = source.substr(start_byte, end_byte - start_byte);
+                // Strip surrounding quotes if present (string literals include them)
+                if (text.size() >= 2 &&
+                    (text.front() == '"' || text.front() == '\'' || text.front() == '<')) {
+                    text = text.substr(1, text.size() - 2);
+                }
+                imports.push_back({line, std::move(text)});
             }
         }
     }
@@ -238,6 +248,7 @@ int LspDependencyResolver::resolve_dependencies(
 
     for (const auto& imp : imports) {
         int import_line = imp.line;
+        std::string import_text = imp.text;
 
         bool sent = lsp_manager_.send_when_ready(language,
             [this, file_path, file_uri, file_id, import_line, import_kind, language]() mutable {
@@ -262,7 +273,26 @@ int LspDependencyResolver::resolve_dependencies(
                     });
             });
 
-        if (sent) dispatched++;
+        if (sent) {
+            dispatched++;
+        } else {
+            // LSP unavailable — persist Tree-sitter-parsed import as fallback
+            // target_file_id is NULL (unresolved), target_file_path is the raw import text
+            try {
+                SQLite::Statement ins(db_,
+                    "INSERT INTO lsp_dependencies "
+                    "(importer_file_id, import_line, import_kind, target_file_id, target_file_path) "
+                    "VALUES (?, ?, ?, NULL, ?)");
+                ins.bind(1, file_id);
+                ins.bind(2, import_line);
+                ins.bind(3, import_kind);
+                ins.bind(4, import_text);
+                ins.exec();
+            } catch (const std::exception& e) {
+                spdlog::warn("LspDependencyResolver: fallback insert failed for line {}: {}",
+                             import_line, e.what());
+            }
+        }
     }
 
     return dispatched;
