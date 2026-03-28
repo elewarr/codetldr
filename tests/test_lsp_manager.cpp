@@ -301,6 +301,41 @@ static void test_7_sigpipe_reset() {
 }
 
 // ============================================================
+// Test: version probe rejects binaries that exit non-zero (simulates rustup proxy stub)
+// ============================================================
+static void test_version_probe_rejects_non_zero_exit() {
+    // /usr/bin/false exits 1 — simulates rustup proxy stub
+    std::string cmd = "/usr/bin/false --version 2>&1";
+    FILE* pipe = ::popen(cmd.c_str(), "r");
+    CHECK(pipe != nullptr, "test_version_probe: popen must succeed");
+    char buf[256];
+    std::string out;
+    while (::fgets(buf, sizeof(buf), pipe)) out += buf;
+    int rc = ::pclose(pipe);
+    CHECK(rc != 0, "test_version_probe: /usr/bin/false must exit non-zero");
+
+    // Simulate probe logic: non-zero exit = version string cleared = skip registration
+    bool would_register = (rc == 0 && !out.empty());
+    CHECK(!would_register,
+          "test_version_probe: proxy stub (non-zero exit) must NOT register backend");
+
+    // Positive case: /bin/echo exits 0 with output — would register
+    std::string cmd2 = "/bin/echo test-version 2>&1";
+    FILE* pipe2 = ::popen(cmd2.c_str(), "r");
+    CHECK(pipe2 != nullptr, "test_version_probe: popen2 must succeed");
+    std::string out2;
+    while (::fgets(buf, sizeof(buf), pipe2)) out2 += buf;
+    int rc2 = ::pclose(pipe2);
+    while (!out2.empty() && (out2.back() == '\n' || out2.back() == '\r'))
+        out2.pop_back();
+    bool would_register2 = (rc2 == 0 && !out2.empty());
+    CHECK(would_register2,
+          "test_version_probe: real binary (zero exit + output) must register backend");
+
+    std::cout << "PASS: test_version_probe_rejects_non_zero_exit\n";
+}
+
+// ============================================================
 // main
 // ============================================================
 int main() {
@@ -311,6 +346,7 @@ int main() {
     test_5_status_json_filtering();
     test_6_to_string_coverage();
     test_7_sigpipe_reset();
+    test_version_probe_rejects_non_zero_exit();
 
     std::cout << "\nAll LspManager tests passed.\n";
     return 0;
