@@ -52,7 +52,7 @@ static void warn_inotify_limit() {
 // Source file extensions to index during initial scan (mirrors FileWatcher::is_source_file())
 static const std::unordered_set<std::string> kScanExtensions = {
     ".cpp", ".h", ".py", ".js", ".ts", ".java", ".kt", ".swift",
-    ".m", ".rs", ".c", ".cc", ".cxx", ".hpp", ".tsx", ".jsx"
+    ".m", ".rs", ".c", ".cc", ".cxx", ".hpp", ".tsx", ".jsx", ".go"
 };
 } // anonymous namespace
 
