@@ -21,6 +21,8 @@
 //  12. test_language_id_mapping: language_id_for maps extensions correctly via didOpen
 //  13. test_cargo_toml_not_found: rust-analyzer stays ready when Cargo.toml absent
 //  14. test_cargo_toml_found_in_root: rust-analyzer stays ready when Cargo.toml present
+//  15. test_go_mod_not_found: gopls stays ready when go.mod absent
+//  16. test_go_mod_found_in_root: gopls stays ready when go.mod present
 
 #include "lsp/lsp_manager.h"
 #include "lsp/lsp_transport.h"
@@ -826,6 +828,85 @@ static void test_cargo_toml_found_in_root() {
 }
 
 // ============================================================
+// Test 15: test_go_mod_not_found
+// gopls stays ready when go.mod is absent (no degradation)
+// ============================================================
+static void test_go_mod_not_found() {
+    LspManager mgr;
+    std::string tmpdir = make_temp_dir();
+    CHECK(!tmpdir.empty(), "test_go_mod_not_found: tmpdir creation failed");
+    mgr.set_project_root(tmpdir);
+
+    LspServerConfig cfg;
+    cfg.command = "/bin/cat";
+    cfg.args    = {};
+    cfg.extensions = {".go"};
+
+    mgr.register_language("go", cfg);
+    mgr.set_detected_languages({"go"});
+    mgr.ensure_server("go");
+
+    // Complete handshake — check_go_mod is called for "go"
+    complete_handshake(mgr, "go");
+
+    // No go.mod in tmpdir -> must stay ready (NOT degraded)
+    auto status = mgr.status_json();
+    bool found_ready = false;
+    for (const auto& s : status) {
+        if (s["language"] == "go" && s["state"] == "ready") {
+            found_ready = true;
+        }
+    }
+    CHECK(found_ready,
+          "test_go_mod_not_found: go server must stay ready when go.mod absent");
+
+    ::rmdir(tmpdir.c_str());
+    mgr.shutdown();
+    std::cout << "PASS: test_go_mod_not_found\n";
+}
+
+// ============================================================
+// Test 16: test_go_mod_found_in_root
+// gopls stays ready when go.mod is present
+// ============================================================
+static void test_go_mod_found_in_root() {
+    LspManager mgr;
+    std::string tmpdir = make_temp_dir();
+    CHECK(!tmpdir.empty(), "test_go_mod_found_in_root: tmpdir creation failed");
+    mgr.set_project_root(tmpdir);
+
+    // Create go.mod at project root
+    std::ofstream gomod(tmpdir + "/go.mod");
+    gomod << "module example.com/mymod\ngo 1.21\n";
+    gomod.close();
+
+    LspServerConfig cfg;
+    cfg.command = "/bin/cat";
+    cfg.args    = {};
+    cfg.extensions = {".go"};
+
+    mgr.register_language("go", cfg);
+    mgr.set_detected_languages({"go"});
+    mgr.ensure_server("go");
+    complete_handshake(mgr, "go");
+
+    auto status = mgr.status_json();
+    bool found_ready = false;
+    for (const auto& s : status) {
+        if (s["language"] == "go" && s["state"] == "ready") {
+            found_ready = true;
+        }
+    }
+    CHECK(found_ready,
+          "test_go_mod_found_in_root: go server must stay ready when go.mod present");
+
+    ::unlink((tmpdir + "/go.mod").c_str());
+    ::rmdir(tmpdir.c_str());
+    mgr.shutdown();
+    std::cout << "PASS: test_go_mod_found_in_root\n";
+}
+
+// ============================================================
 // main
 // ============================================================
 int main() {
@@ -843,6 +924,8 @@ int main() {
     test_language_id_mapping();
     test_cargo_toml_not_found();
     test_cargo_toml_found_in_root();
+    test_go_mod_not_found();
+    test_go_mod_found_in_root();
 
     std::cout << "\nAll LspHandshake tests passed.\n";
     return 0;
