@@ -187,6 +187,34 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // gopls for Go (GO-01)
+        std::string gopls_path = find_binary("gopls");
+        if (!gopls_path.empty()) {
+            // Version probe: 'gopls version' (subcommand, NOT --version flag)
+            // exits 0 with "golang.org/x/tools/gopls vX.Y.Z" on success
+            std::string gopls_cmd = gopls_path + " version 2>&1";
+            FILE* gopls_pipe = ::popen(gopls_cmd.c_str(), "r");
+            std::string gopls_version;
+            if (gopls_pipe) {
+                char gopls_buf[256];
+                while (::fgets(gopls_buf, sizeof(gopls_buf), gopls_pipe))
+                    gopls_version += gopls_buf;
+                int gopls_rc = ::pclose(gopls_pipe);
+                while (!gopls_version.empty() &&
+                       (gopls_version.back() == '\n' || gopls_version.back() == '\r')) {
+                    gopls_version.pop_back();
+                }
+                if (gopls_rc != 0) gopls_version.clear();
+            }
+            if (!gopls_version.empty()) {
+                lsp_manager.register_language("go", {gopls_path, {}, {".go"}});
+                spdlog::info("LSP: registered gopls {} at {}", gopls_version, gopls_path);
+            } else {
+                spdlog::warn("LSP: gopls found at {} but version check failed "
+                             "— Go LSP disabled", gopls_path);
+            }
+        }
+
         lsp_manager.set_project_root(project_root);
         coordinator.set_lsp_manager(&lsp_manager);
 
