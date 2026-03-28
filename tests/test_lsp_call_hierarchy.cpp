@@ -7,6 +7,8 @@
 #include "storage/migrations.h"
 #include "storage/database.h"
 #include "lsp/lsp_call_graph_resolver.h"
+#include "lsp/lsp_call_hierarchy_resolver.h"
+#include "lsp/lsp_manager.h"
 #include <SQLiteCpp/SQLiteCpp.h>
 #include <nlohmann/json.hpp>
 #include <iostream>
@@ -583,6 +585,39 @@ static void test_multiple_callers() {
 }
 
 // ============================================================
+// Test 11: resolve_incoming_callers returns 0 for Kotlin (KT-03 skip)
+// ============================================================
+static void test_kotlin_no_call_hierarchy() {
+    auto db = make_test_db();
+
+    // Insert a Kotlin file with a function symbol
+    int64_t fid = insert_file(db, "/test/Main.kt", "kotlin");
+    insert_symbol(db, fid, "processData", "function", 5, 15);
+
+    // Create resolver — needs an LspManager reference
+    codetldr::LspManager lsp_manager;
+    codetldr::LspCallHierarchyResolver resolver(db, lsp_manager);
+
+    // Call resolve_incoming_callers with language="kotlin"
+    int dispatched = resolver.resolve_incoming_callers(
+        std::filesystem::path("/test/Main.kt"), fid, "kotlin");
+
+    // Must return 0 — no LSP requests dispatched (kNoCallHierarchy skip)
+    check(dispatched == 0,
+          "Test11: resolve_incoming_callers returns 0 for kotlin (callHierarchy skip)");
+
+    // Verify no rows were inserted into lsp_call_hierarchy_callers for this file
+    {
+        SQLite::Statement q(db,
+            "SELECT COUNT(*) FROM lsp_call_hierarchy_callers WHERE callee_file_id = ?");
+        q.bind(1, fid);
+        q.executeStep();
+        check(q.getColumn(0).getInt() == 0,
+              "Test11: no lsp_call_hierarchy_callers rows for kotlin file");
+    }
+}
+
+// ============================================================
 // main
 // ============================================================
 int main() {
@@ -598,6 +633,7 @@ int main() {
     test_fallback_tree_sitter();
     test_symbol_not_found();
     test_multiple_callers();
+    test_kotlin_no_call_hierarchy();
 
     std::cout << "\n=== Results: " << g_pass << " passed, " << g_fail << " failed ===\n";
     return g_fail > 0 ? 1 : 0;

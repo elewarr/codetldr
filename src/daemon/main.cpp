@@ -215,6 +215,38 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // kotlin-language-server for Kotlin (KT-01, KT-04)
+        std::string kls_path = find_binary("kotlin-language-server");
+        if (!kls_path.empty()) {
+            // Version probe: kotlin-language-server --version
+            std::string kls_cmd = kls_path + " --version 2>&1";
+            FILE* kls_pipe = ::popen(kls_cmd.c_str(), "r");
+            std::string kls_version;
+            if (kls_pipe) {
+                char kls_buf[256];
+                while (::fgets(kls_buf, sizeof(kls_buf), kls_pipe)) kls_version += kls_buf;
+                int kls_rc = ::pclose(kls_pipe);
+                while (!kls_version.empty() &&
+                       (kls_version.back() == '\n' || kls_version.back() == '\r')) {
+                    kls_version.pop_back();
+                }
+                if (kls_rc != 0) kls_version.clear();
+            }
+            if (!kls_version.empty()) {
+                codetldr::LspServerConfig kls_config;
+                kls_config.command = kls_path;
+                kls_config.args = {};  // kotlin-language-server uses stdio by default
+                kls_config.extensions = {".kt", ".kts"};
+                kls_config.handshake_timeout_s = 120;  // KT-04: JVM cold-start needs 120s
+                lsp_manager.register_language("kotlin", kls_config);
+                spdlog::info("LSP: registered kotlin-language-server {} at {} (timeout=120s)",
+                             kls_version, kls_path);
+            } else {
+                spdlog::warn("LSP: kotlin-language-server found at {} but --version failed "
+                             "— Kotlin LSP disabled", kls_path);
+            }
+        }
+
         lsp_manager.set_project_root(project_root);
         coordinator.set_lsp_manager(&lsp_manager);
 

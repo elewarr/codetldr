@@ -7,6 +7,7 @@
 #include <spdlog/spdlog.h>
 #include <filesystem>
 #include <string>
+#include <unordered_set>
 
 namespace codetldr {
 
@@ -162,6 +163,16 @@ void LspCallHierarchyResolver::handle_incoming_calls_response(
 int LspCallHierarchyResolver::resolve_incoming_callers(
         const std::filesystem::path& file_path, int64_t file_id,
         const std::string& language) {
+
+    // KT-03: kotlin-language-server does not support callHierarchy.
+    // Skip LSP path entirely — the get_incoming_callers handler in coordinator.cpp
+    // falls back to Tree-sitter call_edges when LSP returns 0 dispatched queries.
+    static const std::unordered_set<std::string> kNoCallHierarchy = {"kotlin"};
+    if (kNoCallHierarchy.count(language)) {
+        spdlog::debug("LspCallHierarchyResolver: skipping callHierarchy for '{}' "
+                      "(server does not support it)", language);
+        return 0;
+    }
 
     // Delete stale lsp_call_hierarchy_callers for this file before inserting new ones
     try {
