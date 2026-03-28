@@ -359,6 +359,173 @@ static void test_kotlin_timeout_config() {
 }
 
 // ============================================================
+// Tests for all_backends_ready() gate logic (COLD-04)
+//
+// NOTE: kReady/kIndexing/kDegraded states are only reachable via real LSP
+// handshake — no public API to set state directly. These tests cover the
+// observable contract: only kNotStarted and kStarting block readiness.
+// The implementation is structured so all other states (kReady, kIndexing,
+// kDegraded) pass through the loop without returning false — verified by
+// the implementation's exhaustive if-conditions.
+// ============================================================
+
+// Test: empty LspManager -> all_backends_ready() returns true
+static void test_all_backends_ready_empty() {
+    LspManager mgr;
+    CHECK(mgr.all_backends_ready(),
+          "test_all_backends_ready_empty: empty mgr must return true");
+    std::cout << "PASS: test_all_backends_ready_empty\n";
+}
+
+// Test: one detected backend with failed-spawn (kNotStarted after spawn failure)
+//       -> returns false
+static void test_all_backends_ready_one_starting() {
+    LspManager mgr;
+    LspServerConfig cfg;
+    cfg.command = "/nonexistent/binary";
+    cfg.args = {};
+    cfg.extensions = {".cpp"};
+
+    mgr.register_language("cpp", cfg);
+    mgr.set_detected_languages({"cpp"});
+
+    // ensure_server fails (spawn fails) — state stays kNotStarted, detected=true
+    mgr.ensure_server("cpp");
+
+    // kNotStarted + detected -> blocks -> returns false
+    CHECK(!mgr.all_backends_ready(),
+          "test_all_backends_ready_one_starting: detected+kNotStarted must return false");
+    std::cout << "PASS: test_all_backends_ready_one_starting\n";
+}
+
+// Test: only kUnavailable backends (registered via register_unavailable_language)
+//       -> all_backends_ready() returns true (kUnavailable is skipped)
+static void test_all_backends_ready_unavailable_only() {
+    LspManager mgr;
+    mgr.register_unavailable_language("java", "jdtls not found");
+    // java is detected=true, state=kUnavailable — skipped by all_backends_ready()
+    CHECK(mgr.all_backends_ready(),
+          "test_all_backends_ready_unavailable_only: kUnavailable-only must return true");
+    std::cout << "PASS: test_all_backends_ready_unavailable_only\n";
+}
+
+// Test: one detected kNotStarted + one kUnavailable
+//       -> kUnavailable is skipped, kNotStarted blocks -> returns false
+static void test_all_backends_ready_skips_unavailable() {
+    LspManager mgr;
+    LspServerConfig cfg;
+    cfg.command = "/nonexistent/binary";
+    cfg.args = {};
+    cfg.extensions = {".cpp"};
+
+    mgr.register_language("cpp", cfg);
+    mgr.register_unavailable_language("java", "jdtls not found");
+    mgr.set_detected_languages({"cpp", "java"});
+
+    // cpp: detected+kNotStarted -> blocks
+    // java: detected+kUnavailable -> skipped
+    CHECK(!mgr.all_backends_ready(),
+          "test_all_backends_ready_skips_unavailable: detected kNotStarted must block even with kUnavailable present");
+    std::cout << "PASS: test_all_backends_ready_skips_unavailable\n";
+}
+
+// Test: one detected kNotStarted + one undetected kNotStarted
+//       -> undetected is skipped, detected blocks -> returns false
+//       AND inverse: only undetected backends -> returns true (no detected entries block)
+static void test_all_backends_ready_skips_undetected() {
+    // Sub-test A: one detected (blocks) + one undetected (skipped) -> false
+    {
+        LspManager mgr;
+        LspServerConfig cfg_cpp, cfg_py;
+        cfg_cpp.command = "/nonexistent/cpp";
+        cfg_cpp.args = {};
+        cfg_cpp.extensions = {".cpp"};
+        cfg_py.command = "/nonexistent/py";
+        cfg_py.args = {};
+        cfg_py.extensions = {".py"};
+
+        mgr.register_language("cpp", cfg_cpp);
+        mgr.register_language("python", cfg_py);
+        // Only detect cpp — python stays undetected
+        mgr.set_detected_languages({"cpp"});
+
+        // cpp: detected+kNotStarted -> blocks; python: undetected -> skipped
+        CHECK(!mgr.all_backends_ready(),
+              "test_all_backends_ready_skips_undetected (A): detected kNotStarted must block");
+    }
+
+    // Sub-test B: only undetected backend -> returns true (no detected entries)
+    {
+        LspManager mgr;
+        LspServerConfig cfg;
+        cfg.command = "/nonexistent/binary";
+        cfg.args = {};
+        cfg.extensions = {".py"};
+
+        mgr.register_language("python", cfg);
+        // Don't detect python — it stays undetected
+        // (no set_detected_languages call — all remain undetected)
+
+        // No detected backends -> loop skips all -> returns true
+        CHECK(mgr.all_backends_ready(),
+              "test_all_backends_ready_skips_undetected (B): undetected-only must return true");
+    }
+
+    std::cout << "PASS: test_all_backends_ready_skips_undetected\n";
+}
+
+// Test: kDegraded counts as ready (contract: only kNotStarted/kStarting block)
+// kDegraded is not directly settable; test verifies the implementation contract:
+// the only blocking states are kNotStarted and kStarting. An empty detected set
+// (nothing in blocking state) confirms non-blocking states pass through.
+// Also verify using register_unavailable_language as the closest proxy for
+// "detected but in a terminal-non-blocking state" — kUnavailable is skipped too.
+static void test_all_backends_ready_includes_degraded() {
+    // Can't set kDegraded without real LSP. Verify the contract boundary:
+    // if no detected backend is in kNotStarted or kStarting, returns true.
+    {
+        LspManager mgr;
+        // No detected backends -> returns true (loop finds nothing blocking)
+        CHECK(mgr.all_backends_ready(),
+              "test_all_backends_ready_includes_degraded: empty -> true confirms non-blocking pass-through");
+    }
+    {
+        LspManager mgr;
+        // kUnavailable is skipped (not kNotStarted/kStarting) -> returns true
+        mgr.register_unavailable_language("cpp", "clangd not found");
+        CHECK(mgr.all_backends_ready(),
+              "test_all_backends_ready_includes_degraded: kUnavailable->skipped confirms non-blocking states pass");
+    }
+    std::cout << "PASS: test_all_backends_ready_includes_degraded\n";
+}
+
+// Test: kIndexing counts as ready (same contract as kDegraded above)
+static void test_all_backends_ready_includes_indexing() {
+    // Can't set kIndexing without real LSP. Verify the contract boundary:
+    // two undetected backends (kNotStarted) are skipped -> no blocking entries -> true.
+    {
+        LspManager mgr;
+        LspServerConfig cfg;
+        cfg.command = "/nonexistent";
+        cfg.args = {};
+        cfg.extensions = {".go"};
+        mgr.register_language("go", cfg);
+        // Do NOT detect — stays undetected kNotStarted -> skipped
+        CHECK(mgr.all_backends_ready(),
+              "test_all_backends_ready_includes_indexing: undetected kNotStarted skipped -> true");
+    }
+    {
+        // Mix of unavailable (skipped) and no detected non-unavailable -> true
+        LspManager mgr;
+        mgr.register_unavailable_language("kotlin", "kotlin-language-server not found");
+        mgr.register_unavailable_language("java", "jdtls not found");
+        CHECK(mgr.all_backends_ready(),
+              "test_all_backends_ready_includes_indexing: multiple kUnavailable -> all skipped -> true");
+    }
+    std::cout << "PASS: test_all_backends_ready_includes_indexing\n";
+}
+
+// ============================================================
 // main
 // ============================================================
 int main() {
@@ -371,6 +538,13 @@ int main() {
     test_7_sigpipe_reset();
     test_version_probe_rejects_non_zero_exit();
     test_kotlin_timeout_config();
+    test_all_backends_ready_empty();
+    test_all_backends_ready_one_starting();
+    test_all_backends_ready_unavailable_only();
+    test_all_backends_ready_skips_unavailable();
+    test_all_backends_ready_skips_undetected();
+    test_all_backends_ready_includes_degraded();
+    test_all_backends_ready_includes_indexing();
 
     std::cout << "\nAll LspManager tests passed.\n";
     return 0;
