@@ -128,6 +128,11 @@ private:
     // Logs warning if not found but does NOT set kDegraded.
     void check_kotlin_build(ServerEntry& entry);
 
+    // Probe filesystem for Java build files after jdtls reaches kReady.
+    // Checks for pom.xml, build.gradle, or build.gradle.kts at project root.
+    // Logs warning if not found but does NOT set kDegraded (jdtls handles single-file Java).
+    void check_java_build(ServerEntry& entry);
+
     // Map file extension to LSP languageId string.
     static std::string language_id_for(const std::filesystem::path& path);
 
