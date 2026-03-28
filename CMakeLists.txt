@@ -268,3 +268,8 @@ add_test(NAME lsp_handshake COMMAND test_lsp_handshake)
 add_executable(test_lsp_call_hierarchy tests/test_lsp_call_hierarchy.cpp)
 target_link_libraries(test_lsp_call_hierarchy PRIVATE codetldr_lsp codetldr_foundation)
 add_test(NAME lsp_call_hierarchy COMMAND test_lsp_call_hierarchy)
+
+add_executable(test_coordinator_cold_start tests/test_coordinator_cold_start.cpp)
+target_link_libraries(test_coordinator_cold_start PRIVATE codetldr_daemon codetldr_foundation)
+target_compile_definitions(test_coordinator_cold_start PRIVATE CODETLDR_TESTING=1)
+add_test(NAME coordinator_cold_start COMMAND test_coordinator_cold_start)

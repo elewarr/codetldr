@@ -18,6 +18,12 @@
 
 // Forward declarations
 namespace SQLite { class Database; }
+
+#ifdef CODETLDR_TESTING
+// Forward-declare test friend class (global namespace) — Phase 33 cold-start unit tests
+class CoordinatorColdStartTest;
+#endif
+
 namespace codetldr {
     class LanguageRegistry;
     class EmbeddingWorker;
@@ -160,6 +166,10 @@ private:
     bool cold_start_complete_ = false;
     std::unordered_map<std::string,
         std::deque<std::pair<std::string, int64_t>>> cold_start_queues_;
+
+#ifdef CODETLDR_TESTING
+    friend class ::CoordinatorColdStartTest;
+#endif
 };
 
 
