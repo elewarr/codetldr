@@ -618,6 +618,39 @@ static void test_kotlin_no_call_hierarchy() {
 }
 
 // ============================================================
+// Test 12: resolve_incoming_callers returns 0 for Ruby (RUBY-LSP-04 skip)
+// ============================================================
+static void test_ruby_no_call_hierarchy() {
+    auto db = make_test_db();
+
+    // Insert a Ruby file with a function symbol
+    int64_t fid = insert_file(db, "/test/app.rb", "ruby");
+    insert_symbol(db, fid, "calculate", "method", 10, 20);
+
+    // Create resolver — needs an LspManager reference
+    codetldr::LspManager lsp_manager;
+    codetldr::LspCallHierarchyResolver resolver(db, lsp_manager);
+
+    // Call resolve_incoming_callers with language="ruby"
+    int dispatched = resolver.resolve_incoming_callers(
+        std::filesystem::path("/test/app.rb"), fid, "ruby");
+
+    // Must return 0 — no LSP requests dispatched (kNoCallHierarchy skip)
+    check(dispatched == 0,
+          "Test12: resolve_incoming_callers returns 0 for ruby (callHierarchy skip)");
+
+    // Verify no rows were inserted into lsp_call_hierarchy_callers for this file
+    {
+        SQLite::Statement q(db,
+            "SELECT COUNT(*) FROM lsp_call_hierarchy_callers WHERE callee_file_id = ?");
+        q.bind(1, fid);
+        q.executeStep();
+        check(q.getColumn(0).getInt() == 0,
+              "Test12: no lsp_call_hierarchy_callers rows for ruby file");
+    }
+}
+
+// ============================================================
 // main
 // ============================================================
 int main() {
@@ -634,6 +667,7 @@ int main() {
     test_symbol_not_found();
     test_multiple_callers();
     test_kotlin_no_call_hierarchy();
+    test_ruby_no_call_hierarchy();
 
     std::cout << "\n=== Results: " << g_pass << " passed, " << g_fail << " failed ===\n";
     return g_fail > 0 ? 1 : 0;
