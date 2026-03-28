@@ -19,6 +19,8 @@
 //  10. test_compile_commands_found_in_root: clangd stays ready when found at project root
 //  11. test_compile_commands_found_in_build: clangd stays ready when found in build/
 //  12. test_language_id_mapping: language_id_for maps extensions correctly via didOpen
+//  13. test_cargo_toml_not_found: rust-analyzer stays ready when Cargo.toml absent
+//  14. test_cargo_toml_found_in_root: rust-analyzer stays ready when Cargo.toml present
 
 #include "lsp/lsp_manager.h"
 #include "lsp/lsp_transport.h"
@@ -745,6 +747,85 @@ static void test_language_id_mapping() {
 }
 
 // ============================================================
+// Test 13: test_cargo_toml_not_found
+// rust-analyzer stays ready when Cargo.toml is absent (no degradation)
+// ============================================================
+static void test_cargo_toml_not_found() {
+    LspManager mgr;
+    std::string tmpdir = make_temp_dir();
+    CHECK(!tmpdir.empty(), "test_cargo_toml_not_found: tmpdir creation failed");
+    mgr.set_project_root(tmpdir);
+
+    LspServerConfig cfg;
+    cfg.command = "/bin/cat";
+    cfg.args    = {};
+    cfg.extensions = {".rs"};
+
+    mgr.register_language("rust", cfg);
+    mgr.set_detected_languages({"rust"});
+    mgr.ensure_server("rust");
+
+    // Complete handshake — check_cargo_toml is called for "rust"
+    complete_handshake(mgr, "rust");
+
+    // No Cargo.toml in tmpdir -> must stay ready (NOT degraded)
+    auto status = mgr.status_json();
+    bool found_ready = false;
+    for (const auto& s : status) {
+        if (s["language"] == "rust" && s["state"] == "ready") {
+            found_ready = true;
+        }
+    }
+    CHECK(found_ready,
+          "test_cargo_toml_not_found: rust server must stay ready when Cargo.toml absent");
+
+    ::rmdir(tmpdir.c_str());
+    mgr.shutdown();
+    std::cout << "PASS: test_cargo_toml_not_found\n";
+}
+
+// ============================================================
+// Test 14: test_cargo_toml_found_in_root
+// rust-analyzer stays ready when Cargo.toml is present
+// ============================================================
+static void test_cargo_toml_found_in_root() {
+    LspManager mgr;
+    std::string tmpdir = make_temp_dir();
+    CHECK(!tmpdir.empty(), "test_cargo_toml_found_in_root: tmpdir creation failed");
+    mgr.set_project_root(tmpdir);
+
+    // Create Cargo.toml at project root
+    std::ofstream cargo(tmpdir + "/Cargo.toml");
+    cargo << "[package]\nname = \"test\"\nversion = \"0.1.0\"\n";
+    cargo.close();
+
+    LspServerConfig cfg;
+    cfg.command = "/bin/cat";
+    cfg.args    = {};
+    cfg.extensions = {".rs"};
+
+    mgr.register_language("rust", cfg);
+    mgr.set_detected_languages({"rust"});
+    mgr.ensure_server("rust");
+    complete_handshake(mgr, "rust");
+
+    auto status = mgr.status_json();
+    bool found_ready = false;
+    for (const auto& s : status) {
+        if (s["language"] == "rust" && s["state"] == "ready") {
+            found_ready = true;
+        }
+    }
+    CHECK(found_ready,
+          "test_cargo_toml_found_in_root: rust server must stay ready when Cargo.toml present");
+
+    ::unlink((tmpdir + "/Cargo.toml").c_str());
+    ::rmdir(tmpdir.c_str());
+    mgr.shutdown();
+    std::cout << "PASS: test_cargo_toml_found_in_root\n";
+}
+
+// ============================================================
 // main
 // ============================================================
 int main() {
@@ -760,6 +841,8 @@ int main() {
     test_compile_commands_found_in_root();
     test_compile_commands_found_in_build();
     test_language_id_mapping();
+    test_cargo_toml_not_found();
+    test_cargo_toml_found_in_root();
 
     std::cout << "\nAll LspHandshake tests passed.\n";
     return 0;
