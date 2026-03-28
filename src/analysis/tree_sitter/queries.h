@@ -104,6 +104,22 @@ inline LanguageQueries rust() {
     };
 }
 
+inline LanguageQueries go() {
+    return {
+        // symbols
+        "(function_declaration name: (identifier) @name) @definition.function\n"
+        "(method_declaration name: (field_identifier) @name) @definition.method\n"
+        "(type_declaration (type_spec name: (type_identifier) @name)) @definition.class\n",
+        // calls
+        "(call_expression function: (identifier) @name) @reference.call\n"
+        "(call_expression function: (selector_expression field: (field_identifier) @name)) @reference.call\n",
+        // cfg -- no CFG support for Go yet
+        nullptr,
+        // dfg -- no DFG support for Go yet
+        nullptr
+    };
+}
+
 inline LanguageQueries c() {
     return {
         // symbols

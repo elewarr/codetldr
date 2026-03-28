@@ -10,6 +10,7 @@ const TSLanguage* tree_sitter_javascript(void);
 const TSLanguage* tree_sitter_typescript(void);
 const TSLanguage* tree_sitter_tsx(void);
 const TSLanguage* tree_sitter_rust(void);
+const TSLanguage* tree_sitter_go(void);
 const TSLanguage* tree_sitter_c(void);
 const TSLanguage* tree_sitter_cpp(void);
 const TSLanguage* tree_sitter_java(void);
@@ -37,6 +38,9 @@ bool LanguageRegistry::initialize() {
 
     q = queries::rust();
     ok &= register_language("rust", tree_sitter_rust(), q.symbols, q.calls, q.cfg, q.dfg);
+
+    q = queries::go();
+    ok &= register_language("go", tree_sitter_go(), q.symbols, q.calls, q.cfg, q.dfg);
 
     q = queries::c();
     ok &= register_language("c", tree_sitter_c(), q.symbols, q.calls, q.cfg, q.dfg);
@@ -68,6 +72,8 @@ bool LanguageRegistry::initialize() {
     ext_to_lang_[".tsx"] = "tsx";
 
     ext_to_lang_[".rs"]  = "rust";
+
+    ext_to_lang_[".go"]  = "go";
 
     ext_to_lang_[".c"]   = "c";
     ext_to_lang_[".h"]   = "c";  // Default .h to C; heuristic for C++ in future
