@@ -7,6 +7,7 @@
 #include "lsp/lsp_manager.h"
 #include "lsp/lsp_call_graph_resolver.h"
 #include "lsp/lsp_dependency_resolver.h"
+#include "lsp/lsp_call_hierarchy_resolver.h"
 
 #include <CLI/CLI.hpp>
 #include <spdlog/spdlog.h>
@@ -156,6 +157,11 @@ int main(int argc, char* argv[]) {
         auto lsp_dep_resolver = std::make_unique<codetldr::LspDependencyResolver>(
             db.raw(), lsp_manager);
         coordinator.set_lsp_dependency_resolver(std::move(lsp_dep_resolver));
+
+        // Phase 27: LSP call hierarchy resolver
+        auto lsp_ch_resolver = std::make_unique<codetldr::LspCallHierarchyResolver>(
+            db.raw(), lsp_manager);
+        coordinator.set_lsp_call_hierarchy_resolver(std::move(lsp_ch_resolver));
 
         coordinator.run();
 
