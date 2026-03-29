@@ -361,10 +361,10 @@ void register_init_cmd(CLI::App& app, std::string& project_root_str) {
         std::cout << "\n"
                   << GREEN << "+" << std::string(58, '-') << "+" << RESET << "\n"
                   << GREEN << "|" << RESET << BOLD
-                  << "  Add to your CLAUDE.md:                              "
+                  << "  Add to your CLAUDE.md (as a comment):                 "
                   << RESET << GREEN << "|" << RESET << "\n"
                   << GREEN << "|" << RESET << YELLOW << BOLD
-                  << "  @.codetldr/CLAUDE.md                                "
+                  << "  <!-- @.codetldr/CLAUDE.md -->                         "
                   << RESET << GREEN << "|" << RESET << "\n"
                   << GREEN << "+" << std::string(58, '-') << "+" << RESET << "\n\n";
     });
