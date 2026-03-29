@@ -22,6 +22,7 @@
 #include <thread>
 #include <unistd.h>
 #include <poll.h>
+#include <sys/wait.h>
 
 using namespace codetldr;
 using Clock = LspManager::Clock;
