@@ -651,6 +651,39 @@ static void test_ruby_no_call_hierarchy() {
 }
 
 // ============================================================
+// Test 13: resolve_incoming_callers returns 0 for Lua (LUA-LSP-02 skip)
+// ============================================================
+static void test_lua_no_call_hierarchy() {
+    auto db = make_test_db();
+
+    // Insert a Lua file with a function symbol
+    int64_t fid = insert_file(db, "/test/app.lua", "lua");
+    insert_symbol(db, fid, "calculate", "function", 10, 20);
+
+    // Create resolver -- needs an LspManager reference
+    codetldr::LspManager lsp_manager;
+    codetldr::LspCallHierarchyResolver resolver(db, lsp_manager);
+
+    // Call resolve_incoming_callers with language="lua"
+    int dispatched = resolver.resolve_incoming_callers(
+        std::filesystem::path("/test/app.lua"), fid, "lua");
+
+    // Must return 0 -- no LSP requests dispatched (kNoCallHierarchy skip)
+    check(dispatched == 0,
+          "Test13: resolve_incoming_callers returns 0 for lua (callHierarchy skip)");
+
+    // Verify no rows were inserted into lsp_call_hierarchy_callers for this file
+    {
+        SQLite::Statement q(db,
+            "SELECT COUNT(*) FROM lsp_call_hierarchy_callers WHERE callee_file_id = ?");
+        q.bind(1, fid);
+        q.executeStep();
+        check(q.getColumn(0).getInt() == 0,
+              "Test13: no lsp_call_hierarchy_callers rows for lua file");
+    }
+}
+
+// ============================================================
 // main
 // ============================================================
 int main() {
@@ -668,6 +701,7 @@ int main() {
     test_multiple_callers();
     test_kotlin_no_call_hierarchy();
     test_ruby_no_call_hierarchy();
+    test_lua_no_call_hierarchy();
 
     std::cout << "\n=== Results: " << g_pass << " passed, " << g_fail << " failed ===\n";
     return g_fail > 0 ? 1 : 0;
