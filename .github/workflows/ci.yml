@@ -64,11 +64,29 @@ jobs:
     name: Auto-release on main
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust/Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "third_party/tokenizers-cpp -> target"
+
+      - name: Install dependencies
+        run: brew install libomp ninja
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: release-macos-14
 
       - name: Bump patch version from latest release
         env:
@@ -88,10 +106,49 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "New version: v${VERSION}"
 
-      - name: Trigger release workflow
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Configure CMake
         run: |
-          gh workflow run release.yml \
-            -f tag="v${VERSION}" \
-            -R elewarr/codetldr
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DOpenMP_ROOT=$(brew --prefix libomp)
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -LE "agentic|integration" --timeout 60
+
+      - name: Package tarball
+        run: |
+          STAGING="$RUNNER_TEMP/codetldr-staging"
+          mkdir -p "$STAGING"
+          cmake --install build --prefix "$STAGING" --strip
+          cp LICENSE "$STAGING/"
+          TARBALL_NAME="codetldr-${VERSION}-darwin-arm64.tar.gz"
+          tar -czf "$RUNNER_TEMP/$TARBALL_NAME" -C "$STAGING" bin LICENSE
+          echo "TARBALL=$RUNNER_TEMP/$TARBALL_NAME" >> "$GITHUB_ENV"
+          echo "TARBALL_NAME=$TARBALL_NAME" >> "$GITHUB_ENV"
+
+      - name: Compute SHA256
+        run: |
+          SHA256=$(shasum -a 256 "$TARBALL" | awk '{ print $1 }')
+          echo "SHA256=$SHA256" >> "$GITHUB_ENV"
+          echo "Tarball SHA256: $SHA256"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          files: ${{ env.TARBALL }}
+          generate_release_notes: true
+
+      - name: Update tap formula
+        env:
+          GH_TOKEN: ${{ secrets.TAP_UPDATE_TOKEN }}
+        run: |
+          gh workflow run update-formula.yml \
+            -f version="${VERSION}" \
+            -f sha256="${SHA256}" \
+            -R elewarr/homebrew-codetldr
