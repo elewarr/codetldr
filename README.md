@@ -9,7 +9,7 @@ A C++ code analysis tool that gives LLM agents token-efficient, structured under
 ### Homebrew (recommended)
 
 ```console
-$ brew tap codetldr/tap
+$ brew tap elewarr/codetldr
 $ brew install codetldr
 ```
 
@@ -36,7 +36,7 @@ Requirements:
 - Rust toolchain (`rustc` and `cargo` on PATH) — required at build time for tokenizers-cpp
 
 ```console
-$ git clone https://github.com/codetldr/codetldr.git
+$ git clone https://github.com/elewarr/codetldr.git
 $ cd codetldr
 $ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 $ cmake --build build
