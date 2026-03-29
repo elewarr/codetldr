@@ -204,6 +204,12 @@ const LanguageEntry* LanguageRegistry::for_extension(const std::string& ext) con
     return &eit->second;
 }
 
+const LanguageEntry* LanguageRegistry::for_name(const std::string& name) const {
+    auto it = entries_.find(name);
+    if (it == entries_.end()) return nullptr;
+    return &it->second;
+}
+
 std::vector<std::string> LanguageRegistry::language_names() const {
     std::vector<std::string> names;
     names.reserve(entries_.size());

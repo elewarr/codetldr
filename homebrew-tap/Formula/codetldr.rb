@@ -1,11 +1,9 @@
 class Codetldr < Formula
   desc "Token-efficient code analysis for LLM agents"
   homepage "https://github.com/elewarr/codetldr"
-  version "2.3.1"
   url "https://github.com/elewarr/codetldr/releases/download/v2.3.1/codetldr-2.3.1-darwin-arm64.tar.gz"
   sha256 "cedc03e95ea19fc975130f83e5e54821a85b75042bb96d4724167cebfc02ec2c"
   license "MIT"
-  depends_on :macos => :arm64
 
   def install
     bin.install "bin/codetldr"

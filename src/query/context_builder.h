@@ -51,6 +51,19 @@ public:
     /// Return names of all callers of symbol_id.
     std::vector<std::string> get_caller_names(int64_t symbol_id);
 
+    /// Call edge with file/line location (for call graph tool).
+    struct CallEdge {
+        std::string name;
+        std::string file_path;
+        int line = 0;
+    };
+
+    /// Return callees with file path and line number.
+    std::vector<CallEdge> get_callees_with_location(int64_t symbol_id);
+
+    /// Return callers with file path and line number.
+    std::vector<CallEdge> get_callers_with_location(int64_t symbol_id);
+
     /// Return CFG nodes for the given symbol_id, ordered by line ascending.
     /// Returns empty JSON array if symbol has no CFG data (unsupported language).
     nlohmann::json get_control_flow(int64_t symbol_id);

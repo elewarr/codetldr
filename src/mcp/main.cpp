@@ -43,7 +43,7 @@ static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
 
     tools.push_back({
         {"name", "search_text"},
-        {"description", "Full-text search over symbol names, documentation, and source content. Use for finding code by keyword, not by exact symbol name."},
+        {"description", "Full-text search over symbol names and documentation. Falls back to substring matching when FTS finds no results. Use for finding code by keyword, not by exact symbol name."},
         {"inputSchema", {
             {"type", "object"},
             {"properties", {
@@ -182,9 +182,44 @@ static nlohmann::json make_tools_list_response(const nlohmann::json& id) {
 // Map MCP tool name to daemon RPC method, call via DaemonClient, format result.
 // Creates a FRESH DaemonClient for each call (one-request-per-connection design).
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Helper: resolve_path
+// If path is relative, make it absolute using project_root.
+// If already absolute, return as-is.
+// ---------------------------------------------------------------------------
+static std::string resolve_path(const std::string& path, const fs::path& project_root) {
+    if (path.empty()) return path;
+    fs::path p(path);
+    if (p.is_relative()) {
+        return (project_root / p).lexically_normal().string();
+    }
+    return p.lexically_normal().string();
+}
+
+// ---------------------------------------------------------------------------
+// Helper: resolve file_path/file arguments in a tool call's arguments JSON.
+// Mutates the arguments in place for the keys that hold file paths.
+// ---------------------------------------------------------------------------
+static void resolve_file_args(nlohmann::json& args, const fs::path& project_root) {
+    // Tools that use "file_path" key
+    if (args.contains("file_path") && args["file_path"].is_string()) {
+        args["file_path"] = resolve_path(args["file_path"].get<std::string>(), project_root);
+    }
+    // Tools that use "file" key (get_incoming_callers, get_dependencies)
+    if (args.contains("file") && args["file"].is_string()) {
+        args["file"] = resolve_path(args["file"].get<std::string>(), project_root);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helper: dispatch_tool_call
+// Map MCP tool name to daemon RPC method, call via DaemonClient, format result.
+// Creates a FRESH DaemonClient for each call (one-request-per-connection design).
+// ---------------------------------------------------------------------------
 static nlohmann::json dispatch_tool_call(const std::string& tool_name,
-                                          const nlohmann::json& arguments,
-                                          const fs::path& sock_path) {
+                                          nlohmann::json arguments,
+                                          const fs::path& sock_path,
+                                          const fs::path& project_root) {
     // Create fresh connection for this call
     codetldr::DaemonClient client;
     if (!client.connect(sock_path)) {
@@ -202,22 +237,28 @@ static nlohmann::json dispatch_tool_call(const std::string& tool_name,
         } else if (tool_name == "search_text") {
             daemon_resp = client.call("search_text", arguments);
         } else if (tool_name == "get_file_summary") {
+            resolve_file_args(arguments, project_root);
             daemon_resp = client.call("get_file_summary", arguments);
         } else if (tool_name == "get_function_detail") {
+            resolve_file_args(arguments, project_root);
             daemon_resp = client.call("get_function_detail", arguments);
         } else if (tool_name == "get_call_graph") {
             daemon_resp = client.call("get_call_graph", arguments);
         } else if (tool_name == "get_project_overview") {
             daemon_resp = client.call("get_project_overview", nlohmann::json::object());
         } else if (tool_name == "get_control_flow") {
+            resolve_file_args(arguments, project_root);
             daemon_resp = client.call("get_control_flow", arguments);
         } else if (tool_name == "get_data_flow") {
+            resolve_file_args(arguments, project_root);
             daemon_resp = client.call("get_data_flow", arguments);
         } else if (tool_name == "get_embedding_stats") {
             daemon_resp = client.call("get_embedding_stats", nlohmann::json::object());
         } else if (tool_name == "get_incoming_callers") {
+            resolve_file_args(arguments, project_root);
             daemon_resp = client.call("get_incoming_callers", arguments);
         } else if (tool_name == "get_dependencies") {
+            resolve_file_args(arguments, project_root);
             daemon_resp = client.call("get_dependencies", arguments);
         } else {
             return {
@@ -348,7 +389,7 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            nlohmann::json tool_result = dispatch_tool_call(tool_name, arguments, sock_path);
+            nlohmann::json tool_result = dispatch_tool_call(tool_name, arguments, sock_path, project_root);
             nlohmann::json response = {
                 {"jsonrpc", "2.0"},
                 {"id",      id},
