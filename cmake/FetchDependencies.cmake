@@ -106,7 +106,7 @@ endmacro()
 # ============================================================
 FetchContent_Declare(ts_python
     GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-python.git
-    GIT_TAG        26855eabccb19c6abf499fbc5b8dc7cc9ab8bc64
+    GIT_TAG        v0.25.0
     GIT_SHALLOW    TRUE
     SOURCE_SUBDIR  "__no_cmake__"
 )
@@ -118,7 +118,7 @@ add_tree_sitter_grammar(python ${ts_python_SOURCE_DIR})
 # ============================================================
 FetchContent_Declare(ts_javascript
     GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-javascript.git
-    GIT_TAG        58404d8cf191d69f2674a8fd507bd5776f46cb11
+    GIT_TAG        v0.25.0
     GIT_SHALLOW    TRUE
     SOURCE_SUBDIR  "__no_cmake__"
 )
@@ -130,7 +130,7 @@ add_tree_sitter_grammar(javascript ${ts_javascript_SOURCE_DIR})
 # ============================================================
 FetchContent_Declare(ts_typescript
     GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-typescript.git
-    GIT_TAG        75b3874edb2dc714fb1fd77a32013d0f8699989f
+    GIT_TAG        v0.23.2
     GIT_SHALLOW    TRUE
     SOURCE_SUBDIR  "__no_cmake__"
 )
@@ -143,7 +143,7 @@ add_tree_sitter_grammar(tsx        ${ts_typescript_SOURCE_DIR}/tsx)
 # ============================================================
 FetchContent_Declare(ts_rust
     GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-rust.git
-    GIT_TAG        8a1ccae7aaccdc11b04dbd803453e3e9cfd9159b
+    GIT_TAG        v0.24.2
     GIT_SHALLOW    TRUE
     SOURCE_SUBDIR  "__no_cmake__"
 )
@@ -167,7 +167,7 @@ add_tree_sitter_grammar(go ${ts_go_SOURCE_DIR})
 # ============================================================
 FetchContent_Declare(ts_c
     GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-c.git
-    GIT_TAG        ae19b676b13bdcc13b7665397e6d9b14975473dd
+    GIT_TAG        v0.24.1
     GIT_SHALLOW    TRUE
     SOURCE_SUBDIR  "__no_cmake__"
 )
@@ -179,7 +179,7 @@ add_tree_sitter_grammar(c ${ts_c_SOURCE_DIR})
 # ============================================================
 FetchContent_Declare(ts_cpp
     GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-cpp.git
-    GIT_TAG        8b5b49eb196bec7040441bee33b2c9a4838d6967
+    GIT_TAG        v0.23.4
     GIT_SHALLOW    TRUE
     SOURCE_SUBDIR  "__no_cmake__"
 )
@@ -191,7 +191,7 @@ add_tree_sitter_grammar(cpp ${ts_cpp_SOURCE_DIR})
 # ============================================================
 FetchContent_Declare(ts_java
     GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-java.git
-    GIT_TAG        e10607b45ff745f5f876bfa3e94fbcc6b44bdc11
+    GIT_TAG        v0.23.5
     GIT_SHALLOW    TRUE
     SOURCE_SUBDIR  "__no_cmake__"
 )
@@ -203,7 +203,7 @@ add_tree_sitter_grammar(java ${ts_java_SOURCE_DIR})
 # ============================================================
 FetchContent_Declare(ts_kotlin
     GIT_REPOSITORY https://github.com/fwcd/tree-sitter-kotlin.git
-    GIT_TAG        93bfeee1555d2b1442d68c44b0afde2a3b069e46
+    GIT_TAG        0.3.8
     GIT_SHALLOW    TRUE
     SOURCE_SUBDIR  "__no_cmake__"
 )
@@ -216,7 +216,7 @@ add_tree_sitter_grammar(kotlin ${ts_kotlin_SOURCE_DIR})
 # ============================================================
 FetchContent_Declare(ts_swift
     GIT_REPOSITORY https://github.com/alex-pinkus/tree-sitter-swift.git
-    GIT_TAG        190aedc3042a2a1fcc17838eb05b2b2f2c0b7880
+    GIT_TAG        with-generated-files
     GIT_SHALLOW    TRUE
     SOURCE_SUBDIR  "__no_cmake__"
 )
@@ -228,7 +228,7 @@ add_tree_sitter_grammar(swift ${ts_swift_SOURCE_DIR})
 # ============================================================
 FetchContent_Declare(ts_objc
     GIT_REPOSITORY https://github.com/tree-sitter-grammars/tree-sitter-objc.git
-    GIT_TAG        181a81b8f23a2d593e7ab4259981f50122909fda
+    GIT_TAG        v3.0.2
     GIT_SHALLOW    TRUE
     SOURCE_SUBDIR  "__no_cmake__"
 )
@@ -267,7 +267,7 @@ add_tree_sitter_grammar(lua ${ts_lua_SOURCE_DIR})
 # ============================================================
 FetchContent_Declare(efsw
     GIT_REPOSITORY https://github.com/SpartanJ/efsw.git
-    GIT_TAG        22f17a0bcdf3a4edf61f8b14328391463389e548
+    GIT_TAG        1.5.1
     GIT_SHALLOW    TRUE
 )
 set(EFSW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
