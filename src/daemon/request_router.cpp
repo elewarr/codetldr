@@ -394,12 +394,12 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
 
                         // Fallback to Tree-sitter if no LSP data
                         if (!has_lsp_callees) {
-                            auto callees = context_builder_->get_callee_names(sym.id);
+                            auto callees = context_builder_->get_callees_with_location(sym.id);
                             for (const auto& c : callees) {
                                 nlohmann::json edge;
-                                edge["name"]   = c;
-                                edge["file"]   = "";
-                                edge["line"]   = 0;
+                                edge["name"]   = c.name;
+                                edge["file"]   = c.file_path;
+                                edge["line"]   = c.line;
                                 edge["source"] = "tree-sitter-approximate";
                                 result["callees"].push_back(std::move(edge));
                             }
@@ -407,13 +407,13 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
                             // Recurse for depth > 1 (name-based, tree-sitter only)
                             if (depth > 1) {
                                 nlohmann::json nested = nlohmann::json::object();
-                                for (const auto& callee_name : callees) {
-                                    SymbolInfo callee_sym = context_builder_->find_symbol(callee_name);
+                                for (const auto& callee : callees) {
+                                    SymbolInfo callee_sym = context_builder_->find_symbol(callee.name);
                                     if (callee_sym.found) {
                                         auto sub_callees = context_builder_->get_callee_names(callee_sym.id);
                                         nlohmann::json sub_arr = nlohmann::json::array();
                                         for (const auto& sc : sub_callees) sub_arr.push_back(sc);
-                                        nested[callee_name] = std::move(sub_arr);
+                                        nested[callee.name] = std::move(sub_arr);
                                     }
                                 }
                                 if (!nested.empty()) {
@@ -457,12 +457,12 @@ nlohmann::json RequestRouter::dispatch(const nlohmann::json& req) {
 
                         // Fallback to Tree-sitter if no LSP data
                         if (!has_lsp_callers) {
-                            auto callers = context_builder_->get_caller_names(sym.id);
+                            auto callers = context_builder_->get_callers_with_location(sym.id);
                             for (const auto& c : callers) {
                                 nlohmann::json edge;
-                                edge["name"]   = c;
-                                edge["file"]   = "";
-                                edge["line"]   = 0;
+                                edge["name"]   = c.name;
+                                edge["file"]   = c.file_path;
+                                edge["line"]   = c.line;
                                 edge["source"] = "tree-sitter-approximate";
                                 result["callers"].push_back(std::move(edge));
                             }

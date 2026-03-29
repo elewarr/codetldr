@@ -258,6 +258,47 @@ std::vector<std::string> ContextBuilder::get_caller_names(int64_t symbol_id) {
     return names;
 }
 
+std::vector<ContextBuilder::CallEdge> ContextBuilder::get_callees_with_location(int64_t symbol_id) {
+    std::vector<CallEdge> edges;
+    SQLite::Statement q(db_, R"sql(
+        SELECT DISTINCT c.callee_name, f.path, c.line
+        FROM calls c
+        JOIN files f ON f.id = c.file_id
+        WHERE c.caller_id = ?
+        ORDER BY c.line
+    )sql");
+    q.bind(1, symbol_id);
+    while (q.executeStep()) {
+        CallEdge edge;
+        edge.name      = q.getColumn(0).getString();
+        edge.file_path = q.getColumn(1).getString();
+        edge.line      = q.getColumn(2).getInt();
+        edges.push_back(std::move(edge));
+    }
+    return edges;
+}
+
+std::vector<ContextBuilder::CallEdge> ContextBuilder::get_callers_with_location(int64_t symbol_id) {
+    std::vector<CallEdge> edges;
+    SQLite::Statement q(db_, R"sql(
+        SELECT DISTINCT s.name, f.path, c.line
+        FROM calls c
+        JOIN symbols s ON s.id = c.caller_id
+        JOIN files f ON f.id = s.file_id
+        WHERE c.callee_name = (SELECT name FROM symbols WHERE id = ?)
+        ORDER BY c.line
+    )sql");
+    q.bind(1, symbol_id);
+    while (q.executeStep()) {
+        CallEdge edge;
+        edge.name      = q.getColumn(0).getString();
+        edge.file_path = q.getColumn(1).getString();
+        edge.line      = q.getColumn(2).getInt();
+        edges.push_back(std::move(edge));
+    }
+    return edges;
+}
+
 nlohmann::json ContextBuilder::get_control_flow(int64_t symbol_id) {
     nlohmann::json arr = nlohmann::json::array();
     SQLite::Statement q(db_,

@@ -62,7 +62,44 @@ std::string SearchEngine::prepare_fts_query(const std::string& query) {
 }
 
 std::vector<SearchResult> SearchEngine::search_text(const std::string& query, int limit) {
-    return search_symbols(query, "", limit);
+    // First try FTS5 symbol search
+    auto results = search_symbols(query, "", limit);
+    if (!results.empty()) return results;
+
+    // FTS fallback: substring match on symbol names and documentation
+    if (query.empty()) return results;
+
+    try {
+        std::string like_pattern = "%" + query + "%";
+        SQLite::Statement stmt(db_, R"sql(
+            SELECT s.id, s.name, s.kind, COALESCE(s.signature,''),
+                   COALESCE(s.documentation,''), f.path, s.line_start, 0.0
+            FROM symbols s
+            JOIN files f ON f.id = s.file_id
+            WHERE s.name LIKE ? OR COALESCE(s.documentation,'') LIKE ?
+            ORDER BY s.name
+            LIMIT ?
+        )sql");
+        stmt.bind(1, like_pattern);
+        stmt.bind(2, like_pattern);
+        stmt.bind(3, limit);
+        while (stmt.executeStep()) {
+            SearchResult r;
+            r.symbol_id    = stmt.getColumn(0).getInt64();
+            r.name         = stmt.getColumn(1).getText();
+            r.kind         = stmt.getColumn(2).getText();
+            r.signature    = stmt.getColumn(3).getText();
+            r.documentation= stmt.getColumn(4).getText();
+            r.file_path    = stmt.getColumn(5).getText();
+            r.line_start   = stmt.getColumn(6).getInt();
+            r.rank         = stmt.getColumn(7).getDouble();
+            results.push_back(std::move(r));
+        }
+    } catch (const SQLite::Exception&) {
+        return {};
+    }
+
+    return results;
 }
 
 std::vector<SearchResult> SearchEngine::search_symbols(const std::string& query,
@@ -160,6 +197,66 @@ std::vector<SearchResult> SearchEngine::search_symbols(const std::string& query,
     } catch (const SQLite::Exception&) {
         // FTS syntax error or other SQLite error — return empty results gracefully
         return {};
+    }
+
+    // LIKE fallback: when FTS finds nothing and query is non-empty, try substring
+    // match. This helps with camelCase components (e.g., "ViewController" finding
+    // "HomeViewController") that FTS5's unicode61 tokenizer can't split.
+    if (results.empty() && !query.empty() && !kind.empty()) {
+        try {
+            std::string like_pattern = "%" + query + "%";
+            SQLite::Statement stmt(db_, R"sql(
+                SELECT s.id, s.name, s.kind, COALESCE(s.signature,''),
+                       COALESCE(s.documentation,''), f.path, s.line_start, 0.0
+                FROM symbols s
+                JOIN files f ON f.id = s.file_id
+                WHERE s.kind = ? AND s.name LIKE ?
+                ORDER BY s.name
+                LIMIT ?
+            )sql");
+            stmt.bind(1, kind);
+            stmt.bind(2, like_pattern);
+            stmt.bind(3, limit);
+            while (stmt.executeStep()) {
+                SearchResult r;
+                r.symbol_id    = stmt.getColumn(0).getInt64();
+                r.name         = stmt.getColumn(1).getText();
+                r.kind         = stmt.getColumn(2).getText();
+                r.signature    = stmt.getColumn(3).getText();
+                r.documentation= stmt.getColumn(4).getText();
+                r.file_path    = stmt.getColumn(5).getText();
+                r.line_start   = stmt.getColumn(6).getInt();
+                r.rank         = stmt.getColumn(7).getDouble();
+                results.push_back(std::move(r));
+            }
+        } catch (...) {}
+    } else if (results.empty() && !query.empty()) {
+        try {
+            std::string like_pattern = "%" + query + "%";
+            SQLite::Statement stmt(db_, R"sql(
+                SELECT s.id, s.name, s.kind, COALESCE(s.signature,''),
+                       COALESCE(s.documentation,''), f.path, s.line_start, 0.0
+                FROM symbols s
+                JOIN files f ON f.id = s.file_id
+                WHERE s.name LIKE ?
+                ORDER BY s.name
+                LIMIT ?
+            )sql");
+            stmt.bind(1, like_pattern);
+            stmt.bind(2, limit);
+            while (stmt.executeStep()) {
+                SearchResult r;
+                r.symbol_id    = stmt.getColumn(0).getInt64();
+                r.name         = stmt.getColumn(1).getText();
+                r.kind         = stmt.getColumn(2).getText();
+                r.signature    = stmt.getColumn(3).getText();
+                r.documentation= stmt.getColumn(4).getText();
+                r.file_path    = stmt.getColumn(5).getText();
+                r.line_start   = stmt.getColumn(6).getInt();
+                r.rank         = stmt.getColumn(7).getDouble();
+                results.push_back(std::move(r));
+            }
+        } catch (...) {}
     }
 
     return results;

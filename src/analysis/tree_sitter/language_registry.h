@@ -23,6 +23,9 @@ public:
     // Lookup by file extension (including dot). Returns nullptr if unknown.
     const LanguageEntry* for_extension(const std::string& ext) const;
 
+    // Lookup by language name. Returns nullptr if unknown.
+    const LanguageEntry* for_name(const std::string& name) const;
+
     // Get all registered language names
     std::vector<std::string> language_names() const;
 

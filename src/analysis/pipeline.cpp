@@ -37,6 +37,29 @@ AnalysisResult analyze_file(SQLite::Database& db,
         return {0, 0, 0, 0, false, "unsupported extension: " + ext};
     }
 
+    // b2. Content-based override: .h files may be Objective-C, not C.
+    // Check for ObjC indicators in the first 4KB of content.
+    if (entry->name == "c" && (ext == ".h" || ext == ".hpp")) {
+        std::string head = content.substr(0, 4096);
+        bool has_objc = false;
+        // Check for common ObjC patterns
+        if (head.find("@interface") != std::string::npos ||
+            head.find("@implementation") != std::string::npos ||
+            head.find("@property") != std::string::npos ||
+            head.find("@protocol") != std::string::npos ||
+            head.find("@class") != std::string::npos ||
+            head.find("NSObject") != std::string::npos ||
+            head.find("NSString") != std::string::npos) {
+            // Verify with #import (ObjC uses #import, C uses #include)
+            if (head.find("#import") != std::string::npos) {
+                const auto* objc_entry = registry.for_name("objc");
+                if (objc_entry) {
+                    entry = objc_entry;
+                }
+            }
+        }
+    }
+
     // c. Upsert the file into the `files` table
     std::string hash = sha256_file(file_path);
     {
