@@ -142,6 +142,10 @@ private:
     // Logs warning if not found but does NOT set kDegraded (ruby-lsp supports standalone .rb files).
     void check_ruby_gemfile(ServerEntry& entry);
 
+    // Probe filesystem for .luarc.json after lua-language-server reaches kReady.
+    // Informational logging only -- lua-language-server works on standalone .lua files.
+    void check_lua_project(ServerEntry& entry);
+
     // Map file extension to LSP languageId string.
     static std::string language_id_for(const std::filesystem::path& path);
 

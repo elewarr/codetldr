@@ -167,7 +167,7 @@ int LspCallHierarchyResolver::resolve_incoming_callers(
     // KT-03: kotlin-language-server does not support callHierarchy.
     // Skip LSP path entirely — the get_incoming_callers handler in coordinator.cpp
     // falls back to Tree-sitter call_edges when LSP returns 0 dispatched queries.
-    static const std::unordered_set<std::string> kNoCallHierarchy = {"kotlin", "ruby"};
+    static const std::unordered_set<std::string> kNoCallHierarchy = {"kotlin", "ruby", "lua"};
     if (kNoCallHierarchy.count(language)) {
         spdlog::debug("LspCallHierarchyResolver: skipping callHierarchy for '{}' "
                       "(server does not support it)", language);
