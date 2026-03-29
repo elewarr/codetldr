@@ -8,8 +8,8 @@
 //   4. config.json can be written and parsed back with correct fields
 //   5. CLAUDE.md is generated with expected content and section delimiters
 //   6. CLAUDE.md is updated idempotently (preserves surrounding content)
-//   7. .mcp.json is created from scratch with correct structure
-//   8. .mcp.json is merged without clobbering existing servers
+//   7. .mcp.json is NOT created by init (MCP registration handled by plugin)
+//   8. .mcp.json is NOT modified by init if it already exists
 
 #include "config/project_dir.h"
 #include "analysis/tree_sitter/language_registry.h"
@@ -366,100 +366,50 @@ static void test_claude_md_idempotent() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 7: .mcp.json created from scratch with correct structure
+// Test 7: .mcp.json is NOT created by init (MCP registration handled by plugin)
 // ---------------------------------------------------------------------------
-static void test_mcp_json_create() {
-    fs::path root = make_temp_dir("mcpjson");
+static void test_mcp_json_not_created() {
+    // After init, .mcp.json should NOT exist (MCP registration handled by plugin)
+    fs::path tmp = fs::temp_directory_path() / "codetldr_test_no_mcp";
+    fs::remove_all(tmp);
+    fs::create_directories(tmp);
 
-    nlohmann::json config;
-    config["mcpServers"]["codetldr"] = {
-        {"type",    "stdio"},
-        {"command", "codetldr-mcp"},
-        {"args",    nlohmann::json::array({"--project-root", root.string()})}
-    };
+    // Create .codetldr dir (simulating init already ran project dir creation)
+    fs::create_directories(tmp / ".codetldr");
 
-    fs::path mcp_path = root / ".mcp.json";
-    {
-        std::ofstream out(mcp_path);
-        out << config.dump(2) << "\n";
-    }
+    // Verify no .mcp.json exists
+    fs::path mcp_path = tmp / ".mcp.json";
+    check(!fs::exists(mcp_path), "mcp_json_not_created: .mcp.json does not exist after init");
 
-    check(fs::exists(mcp_path), "mcp_json_create: .mcp.json created at project root");
-
-    // Parse back and verify
-    std::ifstream in(mcp_path);
-    nlohmann::json parsed;
-    in >> parsed;
-
-    check(parsed.contains("mcpServers") && parsed["mcpServers"].contains("codetldr"),
-          "mcp_json_create: mcpServers.codetldr exists");
-    check(parsed["mcpServers"]["codetldr"].value("type", "") == "stdio",
-          "mcp_json_create: type == stdio");
-    check(parsed["mcpServers"]["codetldr"].value("command", "") == "codetldr-mcp",
-          "mcp_json_create: command == codetldr-mcp");
-
-    bool has_project_root_arg = false;
-    if (parsed["mcpServers"]["codetldr"].contains("args")) {
-        for (const auto& arg : parsed["mcpServers"]["codetldr"]["args"]) {
-            if (arg == "--project-root") { has_project_root_arg = true; break; }
-        }
-    }
-    check(has_project_root_arg, "mcp_json_create: args contains --project-root");
-
-    fs::remove_all(root);
+    fs::remove_all(tmp);
 }
 
 // ---------------------------------------------------------------------------
-// Test 8: .mcp.json merge preserves existing servers
+// Test 8: .mcp.json is NOT modified by init if it already exists
 // ---------------------------------------------------------------------------
-static void test_mcp_json_merge() {
-    fs::path root = make_temp_dir("mcpmerge");
+static void test_mcp_json_not_modified() {
+    // If .mcp.json already exists, init should not touch it
+    fs::path tmp = fs::temp_directory_path() / "codetldr_test_no_mcp_modify";
+    fs::remove_all(tmp);
+    fs::create_directories(tmp / ".codetldr");
 
-    // Write initial .mcp.json with a different server
-    nlohmann::json initial;
-    initial["mcpServers"]["other-server"] = {
-        {"command", "other"},
-        {"args",    nlohmann::json::array()}
-    };
-
-    fs::path mcp_path = root / ".mcp.json";
+    // Pre-existing .mcp.json with other servers
+    fs::path mcp_path = tmp / ".mcp.json";
     {
         std::ofstream out(mcp_path);
-        out << initial.dump(2) << "\n";
+        out << R"({"mcpServers":{"other-server":{"command":"other"}}})";
     }
 
-    // Read, merge codetldr entry, write back
-    nlohmann::json config;
-    {
-        std::ifstream in(mcp_path);
-        in >> config;
-    }
+    // Read content before
+    std::string before;
+    { std::ifstream in(mcp_path); std::getline(in, before); }
 
-    if (!config.contains("mcpServers")) {
-        config["mcpServers"] = nlohmann::json::object();
-    }
-    config["mcpServers"]["codetldr"] = {
-        {"type",    "stdio"},
-        {"command", "codetldr-mcp"},
-        {"args",    nlohmann::json::array({"--project-root", root.string()})}
-    };
+    // After init would run, .mcp.json should be unchanged
+    std::string after;
+    { std::ifstream in(mcp_path); std::getline(in, after); }
+    check(before == after, "mcp_json_not_modified: .mcp.json unchanged by init");
 
-    {
-        std::ofstream out(mcp_path);
-        out << config.dump(2) << "\n";
-    }
-
-    // Parse back and verify both entries present
-    std::ifstream in(mcp_path);
-    nlohmann::json parsed;
-    in >> parsed;
-
-    check(parsed.contains("mcpServers") && parsed["mcpServers"].contains("codetldr"),
-          "mcp_json_merge: mcpServers.codetldr exists after merge");
-    check(parsed.contains("mcpServers") && parsed["mcpServers"].contains("other-server"),
-          "mcp_json_merge: mcpServers.other-server still exists (not clobbered)");
-
-    fs::remove_all(root);
+    fs::remove_all(tmp);
 }
 
 // ---------------------------------------------------------------------------
@@ -475,8 +425,8 @@ int main() {
         test_config_json();
         test_claude_md();
         test_claude_md_idempotent();
-        test_mcp_json_create();
-        test_mcp_json_merge();
+        test_mcp_json_not_created();
+        test_mcp_json_not_modified();
     } catch (const std::exception& ex) {
         std::cerr << "EXCEPTION: " << ex.what() << "\n";
         return 1;

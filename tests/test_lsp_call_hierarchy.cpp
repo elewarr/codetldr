@@ -683,6 +683,29 @@ static void test_lua_no_call_hierarchy() {
     }
 }
 
+// SWIFT-03: resolve_incoming_callers returns 0 for swift (callHierarchy skip)
+static void test_swift_no_call_hierarchy() {
+    auto db = make_test_db();
+    int64_t fid = insert_file(db, "/test/Main.swift", "swift");
+    insert_symbol(db, fid, "greet", "function", 5, 15);
+
+    codetldr::LspManager lsp_manager;
+    codetldr::LspCallHierarchyResolver resolver(db, lsp_manager);
+
+    int dispatched = resolver.resolve_incoming_callers(
+        std::filesystem::path("/test/Main.swift"), fid, "swift");
+
+    check(dispatched == 0,
+          "test_swift_no_call_hierarchy: returns 0 for swift (callHierarchy skip)");
+
+    SQLite::Statement q(db,
+        "SELECT COUNT(*) FROM lsp_call_hierarchy_callers WHERE callee_file_id = ?");
+    q.bind(1, fid);
+    q.executeStep();
+    check(q.getColumn(0).getInt() == 0,
+          "test_swift_no_call_hierarchy: no lsp_call_hierarchy_callers rows for swift");
+}
+
 // ============================================================
 // main
 // ============================================================
@@ -702,6 +725,7 @@ int main() {
     test_kotlin_no_call_hierarchy();
     test_ruby_no_call_hierarchy();
     test_lua_no_call_hierarchy();
+    test_swift_no_call_hierarchy();
 
     std::cout << "\n=== Results: " << g_pass << " passed, " << g_fail << " failed ===\n";
     return g_fail > 0 ? 1 : 0;

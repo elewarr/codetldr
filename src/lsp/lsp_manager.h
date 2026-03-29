@@ -146,6 +146,12 @@ private:
     // Informational logging only -- lua-language-server works on standalone .lua files.
     void check_lua_project(ServerEntry& entry);
 
+    // Probe filesystem for Package.swift and send workspace/symbol probe after
+    // sourcekit-lsp reaches kReady. Logs info for workspace detection, fires
+    // workspace/symbol probe with query "a" per D-03 -- sets kDegraded when
+    // probe returns empty results (SWIFT-04).
+    void check_swift_package(ServerEntry& entry);
+
     // Map file extension to LSP languageId string.
     static std::string language_id_for(const std::filesystem::path& path);
 

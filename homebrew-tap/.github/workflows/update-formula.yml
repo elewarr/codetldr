@@ -1,0 +1,35 @@
+name: Update Formula
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (without v prefix)'
+        required: true
+      sha256:
+        description: 'SHA256 of the release tarball'
+        required: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update formula version and SHA256
+        run: |
+          VERSION="${{ inputs.version }}"
+          SHA256="${{ inputs.sha256 }}"
+          sed -i "s|releases/download/v.*/codetldr-.*-darwin-arm64.tar.gz|releases/download/v${VERSION}/codetldr-${VERSION}-darwin-arm64.tar.gz|" Formula/codetldr.rb
+          sed -i "s/sha256 \".*\"/sha256 \"${SHA256}\"/" Formula/codetldr.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/codetldr.rb
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "Update formula to v${{ inputs.version }}"
+          git push

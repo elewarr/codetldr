@@ -41,20 +41,39 @@ check "SKILL.md contains 'name: codetldr'" $?
 grep -q "user-invocable: false" codetldr-plugin/skills/codetldr/SKILL.md 2>/dev/null
 check "SKILL.md contains 'user-invocable: false'" $?
 
-# Check all 6 tool names
+# Check all 11 tool names
 (grep -q "search_symbols" codetldr-plugin/skills/codetldr/SKILL.md && \
  grep -q "get_file_summary" codetldr-plugin/skills/codetldr/SKILL.md && \
  grep -q "get_function_detail" codetldr-plugin/skills/codetldr/SKILL.md && \
  grep -q "get_call_graph" codetldr-plugin/skills/codetldr/SKILL.md && \
  grep -q "get_project_overview" codetldr-plugin/skills/codetldr/SKILL.md && \
- grep -q "search_text" codetldr-plugin/skills/codetldr/SKILL.md) 2>/dev/null
-check "SKILL.md contains all 6 tool names" $?
+ grep -q "search_text" codetldr-plugin/skills/codetldr/SKILL.md && \
+ grep -q "get_control_flow" codetldr-plugin/skills/codetldr/SKILL.md && \
+ grep -q "get_data_flow" codetldr-plugin/skills/codetldr/SKILL.md && \
+ grep -q "get_embedding_stats" codetldr-plugin/skills/codetldr/SKILL.md && \
+ grep -q "get_incoming_callers" codetldr-plugin/skills/codetldr/SKILL.md && \
+ grep -q "get_dependencies" codetldr-plugin/skills/codetldr/SKILL.md) 2>/dev/null
+check "SKILL.md contains all 11 tool names" $?
 
 # Check trigger phrases in description
 (grep -q "find function" codetldr-plugin/skills/codetldr/SKILL.md && \
  grep -q "search code" codetldr-plugin/skills/codetldr/SKILL.md && \
  grep -q "what does X do" codetldr-plugin/skills/codetldr/SKILL.md) 2>/dev/null
 check "SKILL.md description contains trigger phrases (find function, search code, what does X do)" $?
+
+# ---- find-binary.sh checks ----
+
+grep -q "/opt/homebrew/bin/codetldr" codetldr-plugin/scripts/find-binary.sh 2>/dev/null
+check "find-binary.sh contains /opt/homebrew/bin fallback" $?
+
+grep -q "find-binary.sh" codetldr-plugin/hooks/session-start.sh 2>/dev/null
+check "session-start.sh sources find-binary.sh" $?
+
+grep -q "find-binary.sh" codetldr-plugin/hooks/pre-tool-use.sh 2>/dev/null
+check "pre-tool-use.sh sources find-binary.sh" $?
+
+grep -q "find-binary.sh" codetldr-plugin/hooks/stop.sh 2>/dev/null
+check "stop.sh sources find-binary.sh" $?
 
 # ---- hooks.json checks ----
 

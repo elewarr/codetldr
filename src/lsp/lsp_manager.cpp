@@ -216,6 +216,9 @@ bool LspManager::try_spawn(ServerEntry& entry, const std::string& language) {
             if (language == "lua") {
                 check_lua_project(e);
             }
+            if (language == "swift") {
+                check_swift_package(e);
+            }
         });
 
     return true;
@@ -594,6 +597,87 @@ void LspManager::check_lua_project(ServerEntry& entry) {
                       "-- standalone mode (workspace features limited)", project_root_.string());
     }
     // Do NOT set kDegraded: lua-language-server works on standalone .lua files.
+}
+
+void LspManager::check_swift_package(ServerEntry& entry) {
+    (void)entry;  // No state change -- sourcekit-lsp works without Package.swift
+
+    bool found_workspace = false;
+
+    // D-05: Walk up from project_root_ to find nearest Package.swift
+    std::filesystem::path search = project_root_;
+    while (search.has_parent_path() && search != search.parent_path()) {
+        if (std::filesystem::exists(search / "Package.swift")) {
+            spdlog::info("LspManager: sourcekit-lsp workspace root confirmed "
+                         "(Package.swift at {})", search.string());
+            found_workspace = true;
+            break;
+        }
+        search = search.parent_path();
+    }
+
+    // Also check for .xcodeproj/.xcworkspace (non-SwiftPM projects)
+    if (!found_workspace) {
+        std::error_code ec;
+        for (const auto& dir_entry : std::filesystem::directory_iterator(project_root_,
+                 std::filesystem::directory_options::skip_permission_denied, ec)) {
+            auto ext = dir_entry.path().extension().string();
+            if (ext == ".xcodeproj" || ext == ".xcworkspace") {
+                spdlog::info("LspManager: sourcekit-lsp workspace detected via Xcode project at {}",
+                             project_root_.string());
+                found_workspace = true;
+                break;
+            }
+        }
+    }
+
+    if (!found_workspace) {
+        // D-03/D-04: No workspace marker found -- log warning about potential index issues
+        spdlog::warn("LspManager: sourcekit-lsp: no Package.swift or Xcode project found at {} "
+                     "-- Swift index may be incomplete -- build project first",
+                     project_root_.string());
+    }
+
+    // D-03: Post-handshake workspace/symbol probe with non-empty query "a"
+    // (Pitfall 2: empty-string query always returns [] from sourcekit-lsp)
+    // Uses send_when_ready pattern from request_router.cpp
+    send_when_ready("swift", [this]() {
+        auto* transport = get_transport("swift");
+        if (!transport) return;
+
+        nlohmann::json params;
+        params["query"] = "a";
+
+        transport->send_request("workspace/symbol", params,
+            [this](const nlohmann::json& result, const nlohmann::json& error) {
+                if (!error.is_null()) {
+                    spdlog::warn("LspManager: sourcekit-lsp workspace/symbol probe failed: {}",
+                                 error.dump());
+                    // SWIFT-04: transition to kDegraded when probe errors
+                    auto it = servers_.find("swift");
+                    if (it != servers_.end()) {
+                        it->second.state = LspServerState::kDegraded;
+                        spdlog::info("LspManager: sourcekit-lsp state -> kDegraded (probe error)");
+                    }
+                    return;
+                }
+                if (!result.is_array() || result.empty()) {
+                    spdlog::warn("LspManager: sourcekit-lsp workspace/symbol probe returned "
+                                 "empty results -- Swift index may be incomplete -- "
+                                 "build project first");
+                    // SWIFT-04: transition to kDegraded when index probe returns empty
+                    auto it = servers_.find("swift");
+                    if (it != servers_.end()) {
+                        it->second.state = LspServerState::kDegraded;
+                        spdlog::info("LspManager: sourcekit-lsp state -> kDegraded (empty index)");
+                    }
+                } else {
+                    spdlog::info("LspManager: sourcekit-lsp workspace/symbol probe OK "
+                                 "({} results)", result.size());
+                }
+            });
+    });
+    // SWIFT-04: kDegraded set in async callback when probe returns empty or errors.
 }
 
 void LspManager::ensure_document_open(const std::string& language,

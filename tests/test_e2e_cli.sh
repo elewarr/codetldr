@@ -174,6 +174,24 @@ STATUS_AFTER_STATE=$(echo "$STATUS_AFTER" | python3 -c "import json,sys; d=json.
 [ "$STATUS_AFTER_STATE" = "stopped" ] || [ "$STATUS_AFTER_STATE" = "not_running" ]
 check "status after stop shows stopped/not_running state" $?
 
+# ---- doctor subcommand ----
+
+echo ""
+echo "--- Testing: codetldr doctor ---"
+
+# doctor --help works
+"$CODETLDR" doctor --help >/dev/null 2>&1
+check "codetldr doctor --help exits 0" $?
+
+# doctor runs without crash (may report failures for missing daemon, that's OK)
+OUTPUT=$("$CODETLDR" doctor --project-root "$TEST_DIR" 2>&1) || true
+echo "$OUTPUT" | grep -q "\[PASS\]\|\[FAIL\]"
+check "codetldr doctor produces [PASS] or [FAIL] output" $?
+
+# doctor output contains binary check
+echo "$OUTPUT" | grep -q "Binary"
+check "codetldr doctor reports binary status" $?
+
 # ---- Summary ----
 
 TOTAL=$((PASS_COUNT + FAIL_COUNT))

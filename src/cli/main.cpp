@@ -4,6 +4,7 @@
 #include "config/project_dir.h"
 #include "cli/search_cmd.h"
 #include "cli/init_cmd.h"
+#include "cli/doctor_cmd.h"
 
 #include <CLI/CLI.hpp>
 #include <nlohmann/json.hpp>
@@ -151,9 +152,14 @@ static void print_status(const nlohmann::json& result, bool offline = false) {
     }
 }
 
+#ifndef CODETLDR_VERSION
+#define CODETLDR_VERSION "dev"
+#endif
+
 int main(int argc, char* argv[]) {
     CLI::App app{"codetldr - code analysis daemon"};
-    app.require_subcommand(1);
+    app.set_version_flag("--version", CODETLDR_VERSION);
+    app.require_subcommand(0, 1);
 
     // Common option: --project-root (global, falls through to subcommands)
     std::string project_root_str;
@@ -384,6 +390,11 @@ int main(int argc, char* argv[]) {
     // Subcommand: init (registered from init_cmd.cpp)
     // =========================================================
     register_init_cmd(app, project_root_str);
+
+    // =========================================================
+    // Subcommand: doctor (registered from doctor_cmd.cpp)
+    // =========================================================
+    register_doctor_cmd(app, project_root_str);
 
     CLI11_PARSE(app, argc, argv);
     return 0;
