@@ -6,6 +6,7 @@
 #include <fstream>
 #include <string>
 #include <cstdio>
+#include <unistd.h>
 
 #ifdef __APPLE__
 #include <CommonCrypto/CommonDigest.h>
