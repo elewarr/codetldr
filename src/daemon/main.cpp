@@ -398,6 +398,33 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        // lua-language-server for Lua (LUA-LSP-01)
+        std::string lls_path = find_binary("lua-language-server");
+        if (!lls_path.empty()) {
+            // Version probe: lua-language-server --version
+            std::string lls_cmd = lls_path + " --version 2>&1";
+            FILE* lls_pipe = ::popen(lls_cmd.c_str(), "r");
+            std::string lls_version;
+            if (lls_pipe) {
+                char lls_buf[256];
+                while (::fgets(lls_buf, sizeof(lls_buf), lls_pipe))
+                    lls_version += lls_buf;
+                int lls_rc = ::pclose(lls_pipe);
+                while (!lls_version.empty() &&
+                       (lls_version.back() == '\n' || lls_version.back() == '\r'))
+                    lls_version.pop_back();
+                if (lls_rc != 0) lls_version.clear();
+            }
+            if (!lls_version.empty()) {
+                lsp_manager.register_language("lua",
+                    {lls_path, {}, {".lua"}});
+                spdlog::info("LSP: registered lua-language-server {} at {}", lls_version, lls_path);
+            } else {
+                spdlog::warn("LSP: lua-language-server found at {} but --version failed "
+                             "-- Lua LSP disabled", lls_path);
+            }
+        }
+
         lsp_manager.set_project_root(project_root);
         coordinator.set_lsp_manager(&lsp_manager);
 
