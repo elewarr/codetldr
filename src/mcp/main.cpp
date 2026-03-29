@@ -315,10 +315,14 @@ int main(int argc, char* argv[]) {
     fs::path project_root;
     if (!project_root_str.empty()) {
         project_root = fs::path(project_root_str);
+        if (project_root.is_relative()) {
+            project_root = fs::current_path() / project_root;
+        }
     } else {
         auto git_root = codetldr::find_git_root(fs::current_path());
         project_root = git_root.value_or(fs::current_path());
     }
+    project_root = project_root.lexically_normal();
 
     fs::path sock_path = project_root / ".codetldr" / "daemon.sock";
 
