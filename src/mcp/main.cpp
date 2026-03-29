@@ -256,8 +256,13 @@ static nlohmann::json dispatch_tool_call(const std::string& tool_name,
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
+#ifndef CODETLDR_VERSION
+#define CODETLDR_VERSION "dev"
+#endif
+
 int main(int argc, char* argv[]) {
     CLI::App app{"CodeTLDR MCP stdio server"};
+    app.set_version_flag("--version", CODETLDR_VERSION);
 
     std::string project_root_str;
     app.add_option("--project-root", project_root_str,

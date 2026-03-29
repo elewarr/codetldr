@@ -178,44 +178,6 @@ static bool write_claude_md(const fs::path& project_root, const std::map<std::st
     return true;
 }
 
-// Write (or merge into existing) .mcp.json at project root
-static bool write_mcp_json(const fs::path& project_root) {
-    fs::path path = project_root / ".mcp.json";
-    bool existed = fs::exists(path);
-
-    nlohmann::json config;
-    if (existed) {
-        std::ifstream in(path);
-        try {
-            in >> config;
-        } catch (const std::exception& ex) {
-            std::cerr << "Warning: .mcp.json parse failed (" << ex.what()
-                      << ") — overwriting with fresh config\n";
-            config = nlohmann::json::object();
-        }
-    }
-
-    if (!config.contains("mcpServers")) {
-        config["mcpServers"] = nlohmann::json::object();
-    }
-
-    config["mcpServers"]["codetldr"] = {
-        {"type",    "stdio"},
-        {"command", "codetldr-mcp"},
-        {"args",    nlohmann::json::array({"--project-root", project_root.string()})}
-    };
-
-    std::ofstream out(path);
-    if (!out) return false;
-    out << config.dump(2) << "\n";
-
-    if (existed) {
-        std::cout << "Updated .mcp.json\n";
-    } else {
-        std::cout << "Created .mcp.json\n";
-    }
-    return true;
-}
 
 void register_init_cmd(CLI::App& app, std::string& project_root_str) {
     auto* init_cmd = app.add_subcommand("init", "Initialize codetldr for the current project");
@@ -370,14 +332,7 @@ void register_init_cmd(CLI::App& app, std::string& project_root_str) {
         }
 
         // -------------------------------------------------------
-        // Step 6: Write .mcp.json
-        // -------------------------------------------------------
-        if (!write_mcp_json(project_root)) {
-            std::cerr << "Warning: failed to write .mcp.json\n";
-        }
-
-        // -------------------------------------------------------
-        // Step 7: Migrate from CAPABILITIES.md
+        // Step 6: Migrate from CAPABILITIES.md
         // -------------------------------------------------------
         fs::path caps_path = project_root / ".codetldr" / "CAPABILITIES.md";
         if (fs::exists(caps_path)) {
@@ -391,12 +346,12 @@ void register_init_cmd(CLI::App& app, std::string& project_root_str) {
         }
 
         // -------------------------------------------------------
-        // Step 8: Auto-start daemon
+        // Step 7: Auto-start daemon
         // -------------------------------------------------------
         start_daemon_for_project(project_root);
 
         // -------------------------------------------------------
-        // Step 9: Print import instruction
+        // Step 8: Print import instruction
         // -------------------------------------------------------
         const char* BOLD   = "\033[1m";
         const char* GREEN  = "\033[32m";

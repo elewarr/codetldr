@@ -92,8 +92,13 @@ static std::string detect_java_21_plus() {
     return "";  // No Java 21+ found
 }
 
+#ifndef CODETLDR_VERSION
+#define CODETLDR_VERSION "dev"
+#endif
+
 int main(int argc, char* argv[]) {
     CLI::App app{"codetldr-daemon — background analysis daemon for CodeTLDR"};
+    app.set_version_flag("--version", CODETLDR_VERSION);
 
     std::string project_root_str;
     bool foreground = false;
@@ -423,6 +428,37 @@ int main(int argc, char* argv[]) {
                 spdlog::warn("LSP: lua-language-server found at {} but --version failed "
                              "-- Lua LSP disabled", lls_path);
             }
+        }
+
+        // sourcekit-lsp for Swift (SWIFT-01, SWIFT-02)
+        std::string skit_path;
+        {
+            // D-01: xcrun primary — handles Xcode and CLT installations
+            std::string xcrun_cmd = "xcrun --find sourcekit-lsp 2>/dev/null";
+            FILE* xcrun_pipe = ::popen(xcrun_cmd.c_str(), "r");
+            if (xcrun_pipe) {
+                char xcrun_buf[512];
+                while (::fgets(xcrun_buf, sizeof(xcrun_buf), xcrun_pipe))
+                    skit_path += xcrun_buf;
+                int xcrun_rc = ::pclose(xcrun_pipe);
+                while (!skit_path.empty() &&
+                       (skit_path.back() == '\n' || skit_path.back() == '\r'))
+                    skit_path.pop_back();
+                if (xcrun_rc != 0) skit_path.clear();  // xcrun failed
+            }
+            // D-01: PATH fallback — for Linux or if xcrun fails
+            if (skit_path.empty()) skit_path = find_binary("sourcekit-lsp");
+        }
+        if (!skit_path.empty()) {
+            // D-06: No version probe — xcrun validates existence; no known stubs
+            lsp_manager.register_language("swift", {skit_path, {}, {".swift"}});
+            spdlog::info("LSP: registered sourcekit-lsp at {}", skit_path);
+        } else {
+            // D-02: Explicit unavailability — matches jdtls Java pattern
+            lsp_manager.register_unavailable_language(
+                "swift",
+                "sourcekit-lsp not found — install Xcode or Swift toolchain");
+            spdlog::warn("LSP: sourcekit-lsp not found — Swift LSP disabled");
         }
 
         lsp_manager.set_project_root(project_root);

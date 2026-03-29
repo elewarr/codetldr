@@ -93,11 +93,24 @@ target_link_libraries(codetldr_query
 add_executable(codetldr-daemon src/daemon/main.cpp)
 target_link_libraries(codetldr-daemon PRIVATE codetldr_daemon)
 
-add_executable(codetldr src/cli/main.cpp src/cli/search_cmd.cpp src/cli/init_cmd.cpp)
+add_executable(codetldr src/cli/main.cpp src/cli/search_cmd.cpp src/cli/init_cmd.cpp src/cli/doctor_cmd.cpp)
 target_link_libraries(codetldr PRIVATE codetldr_daemon)
 
 add_executable(codetldr-mcp src/mcp/main.cpp)
 target_link_libraries(codetldr-mcp PRIVATE codetldr_daemon)
+
+# --- Install targets (Homebrew distribution) ---
+include(GNUInstallDirs)
+install(TARGETS codetldr codetldr-daemon codetldr-mcp
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# --- Version compile definitions ---
+target_compile_definitions(codetldr PRIVATE
+    CODETLDR_VERSION="${CMAKE_PROJECT_VERSION}")
+target_compile_definitions(codetldr-daemon PRIVATE
+    CODETLDR_VERSION="${CMAKE_PROJECT_VERSION}")
+target_compile_definitions(codetldr-mcp PRIVATE
+    CODETLDR_VERSION="${CMAKE_PROJECT_VERSION}")
 
 add_library(codetldr_lsp STATIC
   src/lsp/lsp_process.cpp
@@ -226,6 +239,7 @@ add_test(NAME e2e_cli
 set_tests_properties(e2e_cli PROPERTIES
   LABELS "integration"
   TIMEOUT 60
+  ENVIRONMENT "CODETLDR_BIN=$<TARGET_FILE:codetldr>"
 )
 
 add_test(NAME e2e_agentic
