@@ -213,6 +213,9 @@ bool LspManager::try_spawn(ServerEntry& entry, const std::string& language) {
             if (language == "ruby") {
                 check_ruby_gemfile(e);
             }
+            if (language == "lua") {
+                check_lua_project(e);
+            }
         });
 
     return true;
@@ -577,6 +580,20 @@ void LspManager::check_ruby_gemfile(ServerEntry& entry) {
     spdlog::warn("LspManager: ruby-lsp: no Gemfile found at {} or any parent -- "
                  "standalone mode (workspace features limited)", project_root_.string());
     // Do NOT set kDegraded: ruby-lsp works on standalone .rb files.
+}
+
+void LspManager::check_lua_project(ServerEntry& entry) {
+    (void)entry;  // No state change -- lua-language-server supports standalone .lua files
+
+    // Check for .luarc.json (optional workspace config) -- informational only
+    if (std::filesystem::exists(project_root_ / ".luarc.json")) {
+        spdlog::info("LspManager: lua-language-server workspace config found (.luarc.json at {})",
+                     project_root_.string());
+    } else {
+        spdlog::debug("LspManager: lua-language-server: no .luarc.json found at {} "
+                      "-- standalone mode (workspace features limited)", project_root_.string());
+    }
+    // Do NOT set kDegraded: lua-language-server works on standalone .lua files.
 }
 
 void LspManager::ensure_document_open(const std::string& language,
