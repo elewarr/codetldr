@@ -1,7 +1,7 @@
 class Codetldr < Formula
   desc "Token-efficient code analysis for LLM agents"
-  homepage "https://github.com/codetldr/codetldr"
-  url "https://github.com/codetldr/codetldr/releases/download/v0.1.0/codetldr-0.1.0-darwin-arm64.tar.gz"
+  homepage "https://github.com/elewarr/codetldr"
+  url "https://github.com/elewarr/codetldr/releases/download/v0.1.0/codetldr-0.1.0-darwin-arm64.tar.gz"
   sha256 "PLACEHOLDER"
   license "MIT"
 
