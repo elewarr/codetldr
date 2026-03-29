@@ -79,6 +79,6 @@ jobs:
           gh workflow run update-formula.yml \
             -f version="${VERSION}" \
             -f sha256="${SHA256}" \
-            -R codetldr/homebrew-tap
+            -R elewarr/homebrew-codetldr
         env:
           GH_TOKEN: ${{ secrets.TAP_UPDATE_TOKEN }}

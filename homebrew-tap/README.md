@@ -5,7 +5,7 @@ Token-efficient code analysis for LLM agents.
 ## Install
 
 ```sh
-brew tap codetldr/tap
+brew tap elewarr/codetldr
 brew install codetldr
 ```
 
@@ -29,4 +29,4 @@ brew upgrade codetldr
 
 ## More info
 
-- [CodeTLDR repository](https://github.com/codetldr/codetldr)
+- [CodeTLDR repository](https://github.com/elewarr/codetldr)
