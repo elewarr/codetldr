@@ -313,7 +313,7 @@ int main(int argc, char* argv[]) {
             nlohmann::json result = {
                 {"protocolVersion", "2025-11-25"},
                 {"capabilities",   {{"tools", nlohmann::json::object()}}},
-                {"serverInfo",     {{"name", "codetldr"}, {"version", "0.1.0"}}}
+                {"serverInfo",     {{"name", "codetldr"}, {"version", CODETLDR_VERSION}}}
             };
             nlohmann::json response = {
                 {"jsonrpc", "2.0"},
