@@ -351,21 +351,37 @@ void register_init_cmd(CLI::App& app, std::string& project_root_str) {
         start_daemon_for_project(project_root);
 
         // -------------------------------------------------------
-        // Step 8: Print import instruction
+        // Step 8: Auto-append include to ./CLAUDE.md
         // -------------------------------------------------------
-        const char* BOLD   = "\033[1m";
-        const char* GREEN  = "\033[32m";
-        const char* RESET  = "\033[0m";
-        const char* YELLOW = "\033[33m";
+        {
+            const std::string MARKER_START = "<!-- codetldr:start -->";
+            const std::string MARKER_END   = "<!-- codetldr:end -->";
+            const std::string INCLUDE_LINE = "@.codetldr/CLAUDE.md";
+            fs::path claude_md = project_root / "CLAUDE.md";
 
-        std::cout << "\n"
-                  << GREEN << "+" << std::string(58, '-') << "+" << RESET << "\n"
-                  << GREEN << "|" << RESET << BOLD
-                  << "  Add to your CLAUDE.md (as a comment):                 "
-                  << RESET << GREEN << "|" << RESET << "\n"
-                  << GREEN << "|" << RESET << YELLOW << BOLD
-                  << "  <!-- @.codetldr/CLAUDE.md -->                         "
-                  << RESET << GREEN << "|" << RESET << "\n"
-                  << GREEN << "+" << std::string(58, '-') << "+" << RESET << "\n\n";
+            std::string content;
+            if (fs::exists(claude_md)) {
+                std::ifstream in(claude_md);
+                content.assign(std::istreambuf_iterator<char>(in), {});
+            }
+
+            // Check if already present
+            if (content.find(MARKER_START) != std::string::npos) {
+                std::cout << "CLAUDE.md already has codetldr include, skipping\n";
+            } else {
+                // Append with trailing newline if needed
+                if (!content.empty() && content.back() != '\n') {
+                    content += "\n";
+                }
+                content += "\n" + MARKER_START + "\n" + INCLUDE_LINE + "\n" + MARKER_END + "\n";
+                std::ofstream out(claude_md);
+                if (out) {
+                    out << content;
+                    std::cout << "Added codetldr include to CLAUDE.md\n";
+                } else {
+                    std::cerr << "Warning: failed to write CLAUDE.md\n";
+                }
+            }
+        }
     });
 }
