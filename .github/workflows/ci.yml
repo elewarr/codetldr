@@ -59,3 +59,37 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure -LE "agentic|integration" --timeout 60
+
+  release:
+    name: Auto-release on main
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bump patch version from latest release
+        run: |
+          LATEST=$(gh release list --limit 1 --json tagName --jq '.[0].tagName')
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            VERSION="0.1.0"
+          else
+            VERSION="${LATEST#v}"
+            MAJOR=$(echo "$VERSION" | cut -d. -f1)
+            MINOR=$(echo "$VERSION" | cut -d. -f2)
+            PATCH=$(echo "$VERSION" | cut -d. -f3)
+            PATCH=$((PATCH + 1))
+            VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "New version: v${VERSION}"
+
+      - name: Trigger release workflow
+        run: |
+          gh workflow run release.yml \
+            -f tag="v${VERSION}" \
+            -R elewarr/codetldr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
           submodules: recursive
 
       - name: Install Rust toolchain
@@ -82,6 +82,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ env.VERSION }}
           files: ${{ env.TARBALL }}
           generate_release_notes: true
 
