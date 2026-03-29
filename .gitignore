@@ -6,8 +6,6 @@ cmake-build-*/
 .DS_Store
 compile_commands.json
 .idea/
-.claude/worktrees/
-.claude/settings.json
-.claude/package.json
-.claude/gsd-file-manifest.json
+.claude/
+.planning/
 build-semantic/
